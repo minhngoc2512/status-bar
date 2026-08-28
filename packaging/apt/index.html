@@ -1,0 +1,58 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>status-bar &mdash; apt repository</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: light dark; --fg: #16181c; --bg: #fbfbfd; --dim: #5b6470;
+          --line: #dfe3e9; --code-bg: #f2f4f7; }
+  @media (prefers-color-scheme: dark) {
+    :root { --fg: #e6e8ec; --bg: #16181c; --dim: #9aa3af; --line: #2b3038; --code-bg: #1e2229; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0 auto; padding: 3rem 1.25rem 5rem; max-width: 46rem; background: var(--bg);
+         color: var(--fg); font: 16px/1.65 ui-sans-serif, system-ui, "Ubuntu", sans-serif; }
+  h1 { font-size: 1.6rem; margin: 0 0 .25rem; letter-spacing: -.01em; }
+  h2 { font-size: 1rem; margin: 2.5rem 0 .6rem; text-transform: uppercase;
+       letter-spacing: .07em; color: var(--dim); }
+  p.lede { color: var(--dim); margin: 0 0 2rem; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+        padding: .85rem 1rem; overflow-x: auto; font-size: .875rem; line-height: 1.5; }
+  code { font-family: ui-monospace, "Ubuntu Mono", monospace; }
+  a { color: inherit; }
+  footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--line);
+           color: var(--dim); font-size: .875rem; }
+</style>
+
+<h1>status-bar</h1>
+<p class="lede">
+  Chỉ báo Claude Code, thời tiết, crypto và phần cứng trên thanh trạng thái Ubuntu/GNOME.
+  Đây là apt repository — xem mã nguồn tại
+  <a href="https://github.com/minhngoc2512/status-bar">github.com/minhngoc2512/status-bar</a>.
+</p>
+
+<h2>Cài đặt</h2>
+<pre><code>curl -fsSL @BASE_URL@/status-bar-archive-keyring.asc \
+  | sudo gpg --dearmor -o /usr/share/keyrings/status-bar-archive-keyring.gpg
+
+echo "deb [signed-by=/usr/share/keyrings/status-bar-archive-keyring.gpg] @BASE_URL@/ ./" \
+  | sudo tee /etc/apt/sources.list.d/status-bar.list
+
+sudo apt update
+sudo apt install status-bar</code></pre>
+
+<h2>Sau khi cài</h2>
+<pre><code>claude-status-hooks                  # chạy bằng user thường, KHÔNG dùng sudo
+systemctl --user start claude-status</code></pre>
+
+<h2>Cập nhật</h2>
+<pre><code>sudo apt update &amp;&amp; sudo apt upgrade</code></pre>
+
+<h2>Gỡ</h2>
+<pre><code>sudo apt remove status-bar
+sudo rm /etc/apt/sources.list.d/status-bar.list \
+        /usr/share/keyrings/status-bar-archive-keyring.gpg</code></pre>
+
+<footer>
+  Gói <code>Architecture: all</code>. Cần Ubuntu 20.04 trở lên (hoặc bản phân phối tương
+  đương) với GTK 3, PyGObject và extension AppIndicator.
+</footer>

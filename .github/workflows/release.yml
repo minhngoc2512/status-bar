@@ -1,0 +1,67 @@
+name: release
+
+# Tagging is the trigger: push v2.1.2 and CI builds the .deb, attaches it to the
+# release, and the apt workflow republishes the repository from there.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to (re)build the .deb for
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  deb:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      # Kept identical to the locally built packages so CI and local builds
+      # produce the same control fields.
+      DEB_MAINTAINER: Minh Ngoc <minhngoc2512@yahoo.com>
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev
+
+      - name: Resolve the tag
+        run: echo "TAG=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_ENV"
+
+      - name: Refuse to ship a tag that disagrees with __version__
+        run: |
+          version=$(python3 -c "import re,pathlib; print(re.search(r'__version__ = \"([^\"]+)\"', pathlib.Path('claude_status/__init__.py').read_text()).group(1))")
+          if [ "v$version" != "$TAG" ]; then
+            echo "tag $TAG does not match __version__ $version" >&2
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Run the tests
+        run: |
+          python3 test_store.py
+          python3 test_features.py
+
+      - name: Build the package
+        run: ./build-deb.sh
+
+      - name: Attach it to the release
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "dist/status-bar_${VERSION}_all.deb" --clobber
+          else
+            gh release create "$TAG" "dist/status-bar_${VERSION}_all.deb" \
+              --title "$TAG" --generate-notes
+          fi
+
+  apt:
+    needs: deb
+    uses: ./.github/workflows/apt.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    secrets: inherit

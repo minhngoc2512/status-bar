@@ -1,12 +1,15 @@
-Package: claude-status
+Package: status-bar
 Version: @VERSION@
 Section: utils
 Priority: optional
 Architecture: all
 Maintainer: @MAINTAINER@
 Depends: python3 (>= 3.8), python3-gi, gir1.2-gtk-3.0, gir1.2-glib-2.0
+Provides: claude-status
+Conflicts: claude-status
+Replaces: claude-status
 Recommends: gir1.2-ayatanaappindicator3-0.1, gnome-shell-extension-appindicator, libnotify-bin, xdg-utils
-Homepage: https://github.com/
+Homepage: https://github.com/minhngoc2512/status-bar
 Description: Claude Code, weather and crypto indicators for the top bar
  Three GTK tray indicators in one process:
  .

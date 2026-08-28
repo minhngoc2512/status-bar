@@ -65,19 +65,38 @@ môi trường không có D-Bus session, hoặc chỉ có GTK 4.
 
 ## Cài đặt
 
-### Cách 1 — gói `.deb` (đem sang máy khác)
+### Cách 1 — apt repository (khuyến nghị)
+
+```bash
+curl -fsSL https://minhngoc2512.github.io/status-bar/status-bar-archive-keyring.asc \
+  | sudo gpg --dearmor -o /usr/share/keyrings/status-bar-archive-keyring.gpg
+
+echo "deb [signed-by=/usr/share/keyrings/status-bar-archive-keyring.gpg] https://minhngoc2512.github.io/status-bar/ ./" \
+  | sudo tee /etc/apt/sources.list.d/status-bar.list
+
+sudo apt update
+sudo apt install status-bar
+```
+
+`apt upgrade` sẽ tự cập nhật từ đó về sau.
+
+> **Tên gói là `status-bar`, nhưng lệnh và cấu hình vẫn là `claude-status`.**
+> Đổi tên chương trình và thư mục `~/.config` sẽ làm mọi bản cài sẵn có mất cấu hình
+> mà chẳng được gì. Gói cài cả hai lệnh — `status-bar` là symlink tới `claude-status`.
+
+### Cách 2 — tải thẳng gói `.deb`
+
+Lấy từ [Releases](https://github.com/minhngoc2512/status-bar/releases), hoặc tự build:
 
 ```bash
 ./build-deb.sh
 ```
 
-Sinh ra `dist/claude-status_<version>_all.deb` (~30 KB, `Architecture: all`).
+Sinh ra `dist/status-bar_<version>_all.deb` (~50 KB, `Architecture: all`).
 Chỉ cần `dpkg-deb` (gói `dpkg-dev`), không cần debhelper.
 
-Trên máy đích:
-
 ```bash
-sudo apt install ./claude-status_2.0.0_all.deb
+sudo apt install ./status-bar_2.2.0_all.deb
 ```
 
 `apt` sẽ tự kéo `python3-gi`, `gir1.2-gtk-3.0` và các gói khuyến nghị.
@@ -93,6 +112,7 @@ Gói cài vào:
 ```
 /usr/lib/claude-status/          mã nguồn + icons + hooks/emit.sh
 /usr/bin/claude-status           launcher
+/usr/bin/status-bar              symlink tới launcher
 /usr/bin/claude-status-hooks     merge hook cho user đang gọi
 /usr/lib/systemd/user/claude-status.service
 /usr/share/applications/claude-status.desktop
@@ -103,11 +123,11 @@ Gói cài vào:
 mọi user ở lần đăng nhập đồ hoạ kế tiếp. Gỡ:
 
 ```bash
-sudo apt remove claude-status     # giữ config + hook entry
-sudo apt purge claude-status      # kèm hướng dẫn dọn thủ công
+sudo apt remove status-bar     # giữ config + hook entry
+sudo apt purge status-bar      # kèm hướng dẫn dọn thủ công
 ```
 
-### Cách 2 — chạy thẳng từ thư mục checkout
+### Cách 3 — chạy thẳng từ thư mục checkout
 
 ```bash
 ./install.sh
@@ -414,7 +434,10 @@ gen_icons.py              sinh 22 icon SVG
 hooks/emit.sh             hook Claude Code
 merge_settings.py         merge hook vào ~/.claude/settings.json
 packaging/                control, systemd unit, .desktop, copyright, maintainer scripts
+packaging/apt/            trang chủ apt repo + script tạo khoá ký
 build-deb.sh              đóng gói .deb
+build-apt-repo.sh         dựng apt repository phẳng vào ./public
+.github/workflows/        CI: tag -> test -> .deb -> Release -> apt repo
 ```
 
 ## Test
@@ -422,6 +445,39 @@ build-deb.sh              đóng gói .deb
 ```bash
 python3 test_store.py      # 29 assertion: state machine, i18n, icon
 python3 test_features.py   # 97 assertion: config, thời tiết, crypto, hệ thống, GPU, nhãn, icon
+```
+
+## Phát hành
+
+```bash
+# 1. bump __version__ trong claude_status/__init__.py
+git commit -am "..." && git push
+git tag v2.2.0 && git push --tags
+```
+
+`release.yml` chạy test, dựng `.deb`, gắn vào Release, rồi gọi `apt.yml` dựng lại
+apt repository từ **toàn bộ** `.deb` đang đính kèm các Release và deploy lên GitHub Pages.
+Trang web là hàm thuần của các Release, không có state nào phải đồng bộ tay.
+
+Workflow từ chối build nếu tag lệch với `__version__` — chống việc phát hành nhầm số hiệu.
+
+**Khoá ký.** Repository apt bắt buộc phải ký, nếu không mọi người dùng phải thêm
+`[trusted=yes]`, tức tắt đúng cái kiểm tra có ý nghĩa. Tạo khoá một lần:
+
+```bash
+packaging/apt/make-signing-key.sh "status-bar apt repository" you@example.com
+```
+
+Script tạo khoá sign-only **không passphrase** (CI không gõ được passphrase), ghi public key
+vào `packaging/apt/status-bar-archive-keyring.asc` để commit, rồi in ra lệnh bạn tự chạy để
+đưa private key vào secret `APT_GPG_PRIVATE_KEY`. Private key không đi qua tay ai khác.
+Nếu secret lộ: tạo khoá mới, chạy lại workflow `apt`, người dùng import lại public key.
+
+Dựng thử repo ở máy:
+
+```bash
+./build-deb.sh && APT_SIGN_KEY=<fingerprint> ./build-apt-repo.sh
+python3 -m http.server --directory public 8899
 ```
 
 ## Giấy phép

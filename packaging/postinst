@@ -7,7 +7,7 @@ if [ "$1" = "configure" ]; then
 
 	cat <<'MSG'
 
-claude-status installed.
+status-bar installed.
 
   1. Wire the Claude Code hooks into your own settings (run as your user,
      not with sudo) -- only needed for the Claude session indicator:

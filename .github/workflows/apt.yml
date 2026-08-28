@@ -1,0 +1,78 @@
+name: apt repository
+
+# Publishes https://minhngoc2512.github.io/status-bar as a signed flat apt
+# repository. The pool is rebuilt from the .deb assets attached to releases, so
+# the site is a pure function of what has been released -- nothing to keep in
+# sync by hand.
+on:
+  # Called by release.yml: a release created with GITHUB_TOKEN does not fire the
+  # `release` event, so the publish step has to be invoked directly.
+  workflow_call:
+  # Fires when a release is made by hand, with a personal token.
+  release:
+    types: [published, edited, deleted]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install repository tools
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev apt-utils
+
+      - name: Collect every released package
+        run: |
+          mkdir -p dist
+          # gh api rather than `gh release list --json`: the flag is missing on
+          # older gh, and this works the same on any version.
+          for tag in $(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --jq '.[].tag_name'); do
+            # Releases from before the rename carry claude-status_*.deb; those
+            # are deliberately left out so the index holds one package name.
+            gh release download "$tag" --dir dist --pattern 'status-bar_*.deb' --clobber || true
+          done
+          ls -la dist
+
+      - name: Import the signing key
+        env:
+          PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: |
+          if [ -z "$PRIVATE_KEY" ]; then
+            echo "APT_GPG_PRIVATE_KEY is not set. Create it with" >&2
+            echo "  packaging/apt/make-signing-key.sh" >&2
+            echo "An unsigned repository would force every user to add [trusted=yes]." >&2
+            exit 1
+          fi
+          printf '%s\n' "$PRIVATE_KEY" | gpg --batch --import
+          echo "APT_SIGN_KEY=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/{print $10; exit}')" >> "$GITHUB_ENV"
+
+      - name: Build the repository
+        env:
+          APT_REPO_URL: https://minhngoc2512.github.io/status-bar
+        run: ./build-apt-repo.sh
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

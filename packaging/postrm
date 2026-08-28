@@ -4,7 +4,7 @@ set -e
 if [ "$1" = "purge" ]; then
 	cat <<'MSG'
 
-claude-status removed. Two things are left behind on purpose, per user:
+status-bar removed. Two things are left behind on purpose, per user:
 
   ~/.config/claude-status/config.json   your settings
   ~/.claude/settings.json               hook entries pointing at
