@@ -469,9 +469,9 @@ packaging/apt/make-signing-key.sh "status-bar apt repository" you@example.com
 ```
 
 Script tạo khoá sign-only **không passphrase** (CI không gõ được passphrase), ghi public key
-vào `packaging/apt/status-bar-archive-keyring.asc` để commit, rồi in ra lệnh bạn tự chạy để
-đưa private key vào secret `APT_GPG_PRIVATE_KEY`. Private key không đi qua tay ai khác.
-Nếu secret lộ: tạo khoá mới, chạy lại workflow `apt`, người dùng import lại public key.
+vào `packaging/apt/status-bar-archive-keyring.asc` để commit, rồi đẩy private key thẳng vào
+secret `APT_GPG_PRIVATE_KEY` qua pipe — **không ghi private key ra đĩa lần nào**, và keyring
+tạm bị xoá khi script kết thúc. Nếu secret lộ: chạy lại script, người dùng import lại public key.
 
 Dựng thử repo ở máy:
 
