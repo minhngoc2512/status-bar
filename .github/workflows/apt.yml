@@ -55,7 +55,15 @@ jobs:
             echo "An unsigned repository would force every user to add [trusted=yes]." >&2
             exit 1
           fi
-          printf '%s\n' "$PRIVATE_KEY" | gpg --batch --import
+          gpg --version | head -1
+          mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
+          # Needed by the loopback fallback in build-apt-repo.sh; harmless
+          # otherwise. no-tty stops gpg reaching for a terminal that is not there.
+          echo allow-loopback-pinentry >> ~/.gnupg/gpg-agent.conf
+          echo no-tty >> ~/.gnupg/gpg.conf
+          gpgconf --kill gpg-agent || true
+          printf '%s\n' "$PRIVATE_KEY" | gpg --batch --import \
+            || printf '%s\n' "$PRIVATE_KEY" | gpg --batch --pinentry-mode loopback --passphrase "" --import
           echo "APT_SIGN_KEY=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/{print $10; exit}')" >> "$GITHUB_ENV"
 
       - name: Build the repository

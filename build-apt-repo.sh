@@ -56,9 +56,26 @@ apt-ftparchive \
 	-o "APT::FTPArchive::Release::Description=status-bar indicators for Ubuntu/GNOME" \
 	release . >Release
 
+# gpg's handling of a passphrase-less key differs across versions: 2.2 signs
+# happily with plain --batch, while 2.4 (what GitHub's ubuntu-24.04 runners
+# carry) can leave an imported unprotected key in a state where gpg reaches for
+# pinentry and dies with "Inappropriate ioctl for device" on a TTY-less runner.
+# Rather than guess which one is present, try the plain form and fall back to
+# loopback with an empty passphrase.
+sign() {
+	local errors
+	if errors="$(gpg --batch --yes --default-key "$SIGN_KEY" "$@" 2>&1)"; then
+		return 0
+	fi
+	echo "    plain signing failed, retrying with loopback pinentry" >&2
+	printf '    %s\n' "$errors" >&2
+	gpg --batch --yes --pinentry-mode loopback --passphrase "" \
+		--default-key "$SIGN_KEY" "$@"
+}
+
 if [[ -n $SIGN_KEY ]]; then
-	gpg --batch --yes --default-key "$SIGN_KEY" --clearsign -o InRelease Release
-	gpg --batch --yes --default-key "$SIGN_KEY" --detach-sign --armor -o Release.gpg Release
+	sign --clearsign -o InRelease Release
+	sign --detach-sign --armor -o Release.gpg Release
 	# Binary keyring: what `signed-by=` expects in /usr/share/keyrings.
 	gpg --export "$SIGN_KEY" >status-bar-archive-keyring.gpg
 	gpg --export --armor "$SIGN_KEY" >status-bar-archive-keyring.asc
