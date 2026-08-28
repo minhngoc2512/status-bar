@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Claude Status
+GenericName=Status indicators
+Comment=Claude Code session, weather and crypto indicators on the top bar
+Comment[vi]=Chỉ báo session Claude Code, thời tiết và crypto trên thanh trạng thái
+Exec=/usr/bin/claude-status
+Icon=claude-status
+Terminal=false
+Categories=Utility;GTK;
+Keywords=claude;weather;crypto;binance;indicator;tray;
+X-GNOME-UsesNotifications=true

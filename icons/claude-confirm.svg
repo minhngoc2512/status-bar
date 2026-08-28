@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22" shape-rendering="geometricPrecision">
+  <defs>
+    <radialGradient id="g" gradientUnits="userSpaceOnUse" cx="11.0" cy="11.0" r="9">
+      <stop offset="0" stop-color="#ffc14d"/>
+      <stop offset="1" stop-color="#f59300"/>
+    </radialGradient>
+  </defs>
+  <circle cx="11" cy="11" r="7.8" fill="url(#g)"/>
+  <rect x="9.85" y="6.1" width="2.3" height="6.7" rx="1.15" fill="#3d2600"/>
+  <circle cx="11" cy="15.2" r="1.35" fill="#3d2600"/>
+</svg>

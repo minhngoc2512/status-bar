@@ -1,0 +1,27 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "configure" ]; then
+	# Enable the user unit for every account; it starts at graphical login.
+	systemctl --global enable claude-status.service >/dev/null 2>&1 || true
+
+	cat <<'MSG'
+
+claude-status installed.
+
+  1. Wire the Claude Code hooks into your own settings (run as your user,
+     not with sudo) -- only needed for the Claude session indicator:
+
+       claude-status-hooks
+
+  2. Start it now without logging out:
+
+       systemctl --user start claude-status
+
+  Weather and crypto are off by default. Turn them on from the tray icon:
+  Settings -> General.
+
+MSG
+fi
+
+exit 0

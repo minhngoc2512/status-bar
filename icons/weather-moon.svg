@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22" shape-rendering="geometricPrecision">
+  <defs>
+    <radialGradient id="m" gradientUnits="userSpaceOnUse" cx="8.4" cy="8.6" r="11">
+      <stop offset="0" stop-color="#ccd7fb"/>
+      <stop offset="1" stop-color="#8b9dd8"/>
+    </radialGradient>
+    <mask id="bite">
+      <rect width="22" height="22" fill="white"/>
+      <circle cx="14.9" cy="7.7" r="7.1" fill="black"/>
+    </mask>
+  </defs>
+  <circle cx="10.4" cy="11" r="8.0" fill="url(#m)" mask="url(#bite)"/>
+</svg>

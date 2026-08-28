@@ -1,0 +1,19 @@
+# Build output
+/dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Local state that must never be committed: this is per-machine, and
+# weather.detected holds the coordinates of wherever the user happens to be.
+config.json

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Merge the status hooks into the *calling user's* ~/.claude/settings.json.
+# Cannot run from postinst: the settings file is per-user, and postinst is root.
+exec /usr/bin/python3 /usr/lib/claude-status/merge_settings.py "$@"

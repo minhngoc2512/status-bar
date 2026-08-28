@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22" shape-rendering="geometricPrecision">
+  <defs>
+    <radialGradient id="s" gradientUnits="userSpaceOnUse" cx="6.8" cy="6.6" r="6.5">
+      <stop offset="0" stop-color="#ffd451"/>
+      <stop offset="1" stop-color="#ff9f1a"/>
+    </radialGradient>
+    <linearGradient id="c" gradientUnits="userSpaceOnUse" x1="0" y1="7" x2="0" y2="19">
+      <stop offset="0" stop-color="#e2eaf3"/>
+      <stop offset="1" stop-color="#93a6ba"/>
+    </linearGradient>
+  </defs>
+  <g stroke="url(#s)" stroke-width="1.4" stroke-linecap="round">
+    <path d="M11.00 6.60L13.20 6.60"/>
+    <path d="M9.77 9.57L11.33 11.13"/>
+    <path d="M6.80 10.80L6.80 13.00"/>
+    <path d="M3.83 9.57L2.27 11.13"/>
+    <path d="M2.60 6.60L0.40 6.60"/>
+    <path d="M3.83 3.63L2.27 2.07"/>
+    <path d="M6.80 2.40L6.80 0.20"/>
+    <path d="M9.77 3.63L11.33 2.07"/>
+  </g>
+  <circle cx="6.8" cy="6.6" r="3.1" fill="url(#s)"/>
+  <g fill="url(#c)">
+    <circle cx="9.84" cy="13.23" r="3.85"/>
+    <circle cx="14.32" cy="11.85" r="4.77"/>
+    <rect x="6.04" y="13.12" width="12.88" height="4.02" rx="2.01"/>
+  </g>
+
+</svg>
