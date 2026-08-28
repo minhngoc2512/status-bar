@@ -1,18 +1,21 @@
 #!/bin/bash
-# Create the GPG key that signs the apt repository and store it as a GitHub
-# Actions secret. Run this yourself: the private key is a credential and should
+# Create the GPG key that signs the apt repository and store it as GitHub
+# Actions secrets. Run this yourself: the private key is a credential and should
 # not pass through anyone else's hands.
 #
-# The key has NO passphrase, because CI cannot type one. That is the normal
-# trade-off for a repository signing key: guard the GitHub secret, and if it
-# ever leaks, run this again to replace it -- users then re-import the public
-# key. The private key is never written to disk; it goes from the temporary
-# keyring straight into `gh secret set` over a pipe.
+# The key is protected by a random passphrase this script generates, stores as a
+# second secret, and never prints. That is not optional politeness -- gpg 2.4,
+# which GitHub's ubuntu-24.04 runners carry, re-protects an unprotected secret
+# key as it imports it, after which the agent cannot unlock it without a
+# terminal and every signing attempt fails. A key that already carries a
+# passphrase imports and signs cleanly on every version.
+#
+# Neither the private key nor the passphrase is ever written to disk: both go
+# from the temporary keyring straight into `gh secret set` over a pipe.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="${APT_KEY_REPO:-minhngoc2512/status-bar}"
-SECRET="APT_GPG_PRIVATE_KEY"
 
 NAME="${1:-}"
 EMAIL="${2:-}"
@@ -35,28 +38,37 @@ WORK="$(mktemp -d)"
 chmod 700 "$WORK"
 trap 'rm -rf "$WORK"' EXIT
 export GNUPGHOME="$WORK"
+echo allow-loopback-pinentry >"$WORK/gpg-agent.conf"
+
+PASSPHRASE="$(head -c 32 /dev/urandom | base64 | tr -d '\n=')"
 
 echo "==> generating a sign-only RSA-4096 key (this can take a moment)"
-gpg --batch --quiet --quick-generate-key "$NAME <$EMAIL>" rsa4096 sign never
+gpg --batch --quiet --pinentry-mode loopback --passphrase "$PASSPHRASE" \
+	--quick-generate-key "$NAME <$EMAIL>" rsa4096 sign never
 FPR="$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/{print $10; exit}')"
 echo "    fingerprint $FPR"
 
 gpg --export --armor "$FPR" >"$HERE/status-bar-archive-keyring.asc"
 echo "==> public key written to packaging/apt/status-bar-archive-keyring.asc"
 
-echo "==> storing the private key as $SECRET on $REPO"
-gpg --export-secret-keys --armor "$FPR" | gh secret set "$SECRET" --repo "$REPO"
+echo "==> storing secrets on $REPO"
+gpg --batch --quiet --pinentry-mode loopback --passphrase "$PASSPHRASE" \
+	--export-secret-keys --armor "$FPR" \
+	| gh secret set APT_GPG_PRIVATE_KEY --repo "$REPO"
+printf '%s' "$PASSPHRASE" | gh secret set APT_GPG_PASSPHRASE --repo "$REPO"
+echo "    APT_GPG_PRIVATE_KEY, APT_GPG_PASSPHRASE"
+
+gpgconf --kill gpg-agent >/dev/null 2>&1 || true
 
 cat <<MSG
 
-==> done. The temporary keyring is being deleted; nothing is left on disk.
+==> done. The temporary keyring is being deleted; nothing is left on disk, and
+    the passphrase was never printed.
 
     Next:
       git add packaging/apt/status-bar-archive-keyring.asc
-      git commit -m "Add the apt repository signing key"
+      git commit -m "Rotate the apt repository signing key"
       git push
-
-    Then tag a release and CI publishes the repository:
-      git tag v2.2.0 && git push --tags
+      gh workflow run apt.yml
 
 MSG

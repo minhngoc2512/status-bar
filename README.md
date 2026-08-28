@@ -468,10 +468,25 @@ Workflow từ chối build nếu tag lệch với `__version__` — chống vi�
 packaging/apt/make-signing-key.sh "status-bar apt repository" you@example.com
 ```
 
-Script tạo khoá sign-only **không passphrase** (CI không gõ được passphrase), ghi public key
-vào `packaging/apt/status-bar-archive-keyring.asc` để commit, rồi đẩy private key thẳng vào
-secret `APT_GPG_PRIVATE_KEY` qua pipe — **không ghi private key ra đĩa lần nào**, và keyring
-tạm bị xoá khi script kết thúc. Nếu secret lộ: chạy lại script, người dùng import lại public key.
+Script tạo khoá sign-only, bảo vệ bằng một passphrase ngẫu nhiên nó tự sinh và **không bao
+giờ in ra**, ghi public key vào `packaging/apt/status-bar-archive-keyring.asc` để commit, rồi
+đẩy private key và passphrase thẳng vào hai secret `APT_GPG_PRIVATE_KEY` và
+`APT_GPG_PASSPHRASE` qua pipe — không ghi ra đĩa lần nào, keyring tạm xoá khi script kết thúc.
+Nếu secret lộ: chạy lại script, người dùng import lại public key.
+
+**Vì sao khoá bắt buộc phải có passphrase.** gpg 2.4 — bản mà runner ubuntu-24.04 dùng —
+**tự bảo vệ lại** một secret key không passphrase ngay lúc import, sau đó agent không mở khoá
+được nếu không có terminal. Đo trên runner, cả bốn cách đều hỏng:
+
+| Cách gọi | Lỗi |
+| :--- | :--- |
+| `--batch` thường | `Inappropriate ioctl for device` |
+| `--batch --no-tty` | `Inappropriate ioctl for device` |
+| `--pinentry-mode loopback` | `Sorry, we are in batchmode - can't get input` |
+| `loopback --passphrase ""` | `No passphrase given` |
+
+Khoá đã có sẵn passphrase thì import và ký sạch trên mọi phiên bản. Passphrase truyền qua
+file descriptor chứ không qua tham số dòng lệnh, để không lộ trong bảng tiến trình.
 
 Dựng thử repo ở máy:
 

@@ -16,6 +16,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT="${APT_REPO_DIR:-$HERE/public}"
 SOURCE="${APT_REPO_SOURCE:-$HERE/dist}"
 SIGN_KEY="${APT_SIGN_KEY:-}"
+SIGN_PASSPHRASE="${APT_SIGN_PASSPHRASE:-}"
 
 ORIGIN="status-bar"
 LABEL="status-bar"
@@ -56,31 +57,23 @@ apt-ftparchive \
 	-o "APT::FTPArchive::Release::Description=status-bar indicators for Ubuntu/GNOME" \
 	release . >Release
 
-# gpg's handling of a passphrase-less key differs across versions: 2.2 signs
-# happily with plain --batch, while 2.4 (what GitHub's ubuntu-24.04 runners
-# carry) can leave an imported unprotected key in a state where gpg reaches for
-# pinentry and dies with "Inappropriate ioctl for device" on a TTY-less runner.
-# Rather than guess which one is present, try the plain form and fall back to
-# loopback with an empty passphrase.
-# Note the fallback passes no --passphrase at all. gpg rejects an empty one --
-# `--passphrase ""` and `--passphrase-file /dev/null` both fail with "No
-# passphrase given", and `--passphrase-fd` on empty input fails with "Bad
-# passphrase". With loopback and no passphrase option, an unprotected key signs.
-# stdin is closed so a key that really does want one fails fast instead of
-# blocking the job.
+# Signing needs a passphrase-protected key. A key with no passphrase signs fine
+# on gpg 2.2 but not on 2.4 (what GitHub's ubuntu-24.04 runners carry): 2.4
+# protects an unprotected secret key as it imports it, and the agent then has no
+# way to unlock it without a terminal. Measured on the runner, all four
+# workarounds fail -- plain signing and --no-tty give "Inappropriate ioctl for
+# device", loopback with no passphrase gives "we are in batchmode - can't get
+# input", and loopback with an empty one gives "No passphrase given".
+#
+# APT_SIGN_PASSPHRASE goes in on a file descriptor rather than the command line,
+# which would otherwise expose it in the process table.
 sign() {
-	local errors
-	if errors="$(gpg --batch --yes --default-key "$SIGN_KEY" "$@" 2>&1)"; then
-		return 0
+	if [[ -n $SIGN_PASSPHRASE ]]; then
+		gpg --batch --yes --pinentry-mode loopback --passphrase-fd 3 \
+			--default-key "$SIGN_KEY" "$@" 3<<<"$SIGN_PASSPHRASE"
+	else
+		gpg --batch --yes --default-key "$SIGN_KEY" "$@" </dev/null
 	fi
-	echo "    plain signing failed, retrying with loopback pinentry:" >&2
-	printf '    %s\n' "$errors" >&2
-	if gpg --batch --yes --pinentry-mode loopback --default-key "$SIGN_KEY" "$@" </dev/null; then
-		return 0
-	fi
-	echo "    both attempts failed; key state:" >&2
-	gpg --list-secret-keys --with-colons | awk -F: '/^sec:/{print "    protection=" $18 " usage=" $12}' >&2
-	return 1
 }
 
 if [[ -n $SIGN_KEY ]]; then
