@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import fcntl
+import shutil
+import subprocess
+
 from gi.repository import GLib, Gtk
 
 from .claude_panel import ClaudePanel
@@ -11,6 +15,7 @@ from .i18n import Lang, default_lang
 from .panel import Panel, install_font_metrics
 from .prefs import Preferences
 from .system_panel import SystemPanel
+from .sessions import BASE_DIR
 from .weather import WeatherPanel
 
 # How often the weather/crypto menus are rebuilt so their "updated N ago" line
@@ -119,6 +124,56 @@ class App:
         Gtk.main_quit()
 
 
+LOCK_PATH = BASE_DIR / "indicator.lock"
+
+
+def acquire_lock():
+    """Take the single-instance lock, or return None if another copy holds it.
+
+    Two copies are easy to end up with -- the systemd user service plus a click
+    on the desktop entry -- and they do real damage rather than merely showing
+    two icons: drain() unlinks each event file as it reads it, so the two split
+    the spool between them. Measured with three sessions and twelve events, each
+    copy lost a whole session and one of them was left showing "working" for a
+    session that had already asked for confirmation. A permission prompt can go
+    unseen that way.
+
+    flock is released by the kernel when the process dies, so a killed indicator
+    leaves nothing stale behind.
+    """
+    try:
+        LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+        handle = open(LOCK_PATH, "w")
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return None
+    return handle
+
+
+def report_already_running() -> None:
+    """Say so where it will be seen: the journal, and the desktop if possible.
+
+    Launching from the app grid while the service is running would otherwise
+    look like the click did nothing at all.
+    """
+    print("claude-status is already running; leaving the existing one alone.")
+    if shutil.which("notify-send"):
+        try:
+            subprocess.Popen(
+                ["notify-send", "-a", "Claude Status", "Claude Status",
+                 "Đã có một bản đang chạy."],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except OSError:
+            pass
+
+
 def main() -> None:
-    App()
+    lock = acquire_lock()
+    if lock is None:
+        report_already_running()
+        return
+    app = App()
+    app.lock = lock  # keep the descriptor alive for the life of the process
     Gtk.main()

@@ -11,6 +11,8 @@ from claude_status import gpu as GPU  # noqa: E402
 from claude_status import labels as L  # noqa: E402
 from claude_status import sessions as SESS  # noqa: E402
 
+from claude_status import app as APP  # noqa: E402
+
 import merge_settings as HOOKS  # noqa: E402
 from claude_status import system as SYS  # noqa: E402
 from claude_status import weather as W  # noqa: E402
@@ -150,6 +152,23 @@ check(
     C.ticker_url("https://api.binance.com/", ["BTCUSDT", "ETHUSDT"]),
     "https://api.binance.com/api/v3/ticker/24hr?symbols=%5B%22BTCUSDT%22%2C%22ETHUSDT%22%5D",
 )
+
+# --------------------------------------------------------- single instance
+# Two copies do not merely show two icons: drain() unlinks each event file as it
+# reads it, so they split the spool and each ends up with a partial, wrong view.
+with tempfile.TemporaryDirectory() as tmp:
+    real_lock = APP.LOCK_PATH
+    try:
+        APP.LOCK_PATH = Path(tmp) / "indicator.lock"
+        first = APP.acquire_lock()
+        check("the first copy takes the lock", first is not None, True)
+        check("a second copy is refused", APP.acquire_lock(), None)
+        first.close()
+        second = APP.acquire_lock()
+        check("the lock frees when the holder goes", second is not None, True)
+        second.close()
+    finally:
+        APP.LOCK_PATH = real_lock
 
 # ------------------------------------------- hook install / uninstall
 # Both install routes exist (the .deb and a git checkout). Wiring both up makes

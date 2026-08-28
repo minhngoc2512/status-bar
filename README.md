@@ -431,6 +431,16 @@ Panel Claude giữ nguyên id `claude-status` cũ để vị trí trên bar khô
 **Không có event "thinking" riêng.** Trạng thái *working* suy ra từ `UserPromptSubmit`
 đến `Stop`. Không tách được extended thinking khỏi lúc đang sinh text.
 
+**Chỉ một bản chạy được một lúc.** Rất dễ có hai bản: systemd user service cộng thêm một
+cú bấm vào biểu tượng trong app grid. Hậu quả không chỉ là hai icon — `drain()` xoá từng
+file event sau khi đọc, nên hai bản **chia nhau** spool. Đo với 3 session và 12 event: mỗi
+bản mất hẳn một session, và một bản hiển thị `working` cho session thực tế đã chuyển sang
+`confirm` vì bản kia nuốt mất event. Một prompt chờ duyệt có thể biến mất như thế.
+
+Nên `main()` giữ một `flock` trên `~/.cache/claude-status/indicator.lock`. Bản thứ hai in
+một dòng rồi thoát với mã 0, kèm `notify-send` để cú bấm không có vẻ như không làm gì cả.
+flock được kernel nhả khi tiến trình chết, nên `kill -9` không để lại lock cũ.
+
 **Session chết bất thường.** `kill -9` hoặc đóng terminal đột ngột thì `SessionEnd`
 không fire. TTL 6 giờ sẽ dọn, hoặc dùng *Bỏ khỏi danh sách* / *Xóa hết session*.
 Cột thời gian trong menu giúp nhận ra session bị kẹt.
@@ -484,7 +494,7 @@ build-apt-repo.sh         dựng apt repository phẳng vào ./public
 
 ```bash
 python3 test_store.py      # 29 assertion: state machine, i18n, icon
-python3 test_features.py   # 118 assertion: config, thời tiết, crypto, hệ thống, GPU, nhãn, hook, icon
+python3 test_features.py   # 121 assertion: config, thời tiết, crypto, hệ thống, GPU, nhãn, hook, icon
 ```
 
 ## Phát hành
