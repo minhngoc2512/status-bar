@@ -10,6 +10,7 @@ from .crypto import CryptoPanel
 from .i18n import Lang, default_lang
 from .panel import Panel
 from .prefs import Preferences
+from .system_panel import SystemPanel
 from .weather import WeatherPanel
 
 # How often the weather/crypto menus are rebuilt so their "updated N ago" line
@@ -39,7 +40,12 @@ class App:
         self.t = Lang(self.cfg.get("lang") or default_lang())
         self.prefs: Preferences | None = None
 
-        self.panels: list[Panel] = [ClaudePanel(self), WeatherPanel(self), CryptoPanel(self)]
+        self.panels: list[Panel] = [
+            ClaudePanel(self),
+            WeatherPanel(self),
+            CryptoPanel(self),
+            SystemPanel(self),
+        ]
         self.fallback = FallbackPanel(self)
 
         self.cfg.subscribe(self.on_config)
@@ -71,6 +77,8 @@ class App:
 
     def on_age_tick(self) -> bool:
         for panel in self.panels:
+            # The system panel drives its own faster timer; these two only
+            # need a nudge so their "updated N ago" line does not go stale.
             if panel.section in ("weather", "crypto") and panel.visible:
                 panel.refresh()
         return True

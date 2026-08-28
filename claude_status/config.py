@@ -18,7 +18,7 @@ CONFIG_PATH = Path(
 )
 
 # Panels each own a top-level section; anything else counts as "general".
-SECTIONS = ("claude", "weather", "crypto")
+SECTIONS = ("claude", "weather", "crypto", "system")
 
 DEFAULTS: dict = {
     "lang": None,
@@ -40,6 +40,19 @@ DEFAULTS: dict = {
         "show_label": True,
         # cache of the last IP lookup so restarts don't hammer the geo API
         "detected": None,  # {"latitude", "longitude", "place", "at"}
+    },
+    "system": {
+        "enabled": False,
+        "refresh_seconds": 3,
+        "show_label": True,
+        # any of: cpu, temp, ram, gpu, gpu_temp, net
+        "bar_metrics": ["cpu", "temp"],
+        "temp_sensor": "",  # "" = auto-pick the most CPU-ish sensor
+        "warn_celsius": 85,
+        "hot_celsius": 95,
+        "net_unit": "bytes",  # bytes | bits
+        "interfaces": [],  # [] = follow the default route
+        "gpu": True,
     },
     "crypto": {
         "enabled": False,

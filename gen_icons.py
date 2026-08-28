@@ -304,11 +304,45 @@ def crypto_icons() -> None:
     )
 
 
+# --------------------------------------------------------------------------- #
+# system monitor
+# --------------------------------------------------------------------------- #
+
+
+def chip(gid: str) -> str:
+    """A CPU package: pinned square. Distinct in silhouette from the other
+    panels' circles, sky and charts, which is what makes them tellable apart
+    at 16px on a busy panel."""
+    pins = []
+    for offset in (7.4, 11.0, 14.6):
+        pins.append(f'    <path d="M2.7 {offset}H5.6"/>')
+        pins.append(f'    <path d="M16.4 {offset}H19.3"/>')
+        pins.append(f'    <path d="M{offset} 2.7V5.6"/>')
+        pins.append(f'    <path d="M{offset} 16.4V19.3"/>')
+    return (
+        f'  <g stroke="url(#{gid})" stroke-width="1.6" stroke-linecap="round">\n'
+        + "\n".join(pins)
+        + "\n  </g>\n"
+        f'  <rect x="5.0" y="5.0" width="12" height="12" rx="2.4" fill="url(#{gid})"/>\n'
+        f'  <rect x="8.6" y="8.6" width="4.8" height="4.8" rx="1.2" fill="#12181f" opacity="0.55"/>'
+    )
+
+
+def system_icons() -> None:
+    for state, (top, bottom) in {
+        "idle": (TEAL, TEAL_DEEP),
+        "warm": (AMBER, AMBER_DEEP),
+        "hot": (RED, RED_DEEP),
+    }.items():
+        write(f"system-{state}", chip("g"), linear("g", top, bottom, y1=4, y2=18))
+
+
 def main() -> None:
     ICONS.mkdir(parents=True, exist_ok=True)
     claude_icons()
     weather_icons()
     crypto_icons()
+    system_icons()
     print(f"wrote {len(list(ICONS.glob('*.svg')))} icons into {ICONS}")
 
 

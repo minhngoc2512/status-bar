@@ -7,6 +7,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from claude_status import crypto as C  # noqa: E402
+from claude_status import gpu as GPU  # noqa: E402
+from claude_status import system as SYS  # noqa: E402
 from claude_status import weather as W  # noqa: E402
 from claude_status.config import DEFAULTS, Config, merged  # noqa: E402
 from claude_status.paths import ICON_DIR  # noqa: E402
@@ -114,9 +116,58 @@ check(
     "https://api.binance.com/api/v3/ticker/24hr?symbols=%5B%22BTCUSDT%22%2C%22ETHUSDT%22%5D",
 )
 
+# --------------------------------------------------------------------- system
+check("bytes in GiB", SYS.format_bytes(11.1 * 1024**3), "11.1G")
+check("bytes under a KiB keep the B", SYS.format_bytes(512), "512B")
+check("bytes of nothing", SYS.format_bytes(0), "0B")
+check("rate in KB/s", SYS.format_rate(1150), "1.1 KB/s")
+check("rate of nothing has one B", SYS.format_rate(0), "0 B/s")
+check("rate in bits", SYS.format_rate(1150, "bits"), "9.2 kbps")
+check("short rate for the tray", SYS.format_rate_short(1150), "1.1K")
+check("short rate in bits", SYS.format_rate_short(1150, "bits"), "9.2kb")
+check("uptime in days", SYS.format_uptime(2 * 86400 + 3 * 3600), "2d 3h")
+check("uptime in hours", SYS.format_uptime(3 * 3600 + 5 * 60), "3h 05m")
+check("uptime in minutes", SYS.format_uptime(300), "5m")
+
+check("temp state cool", SYS.temperature_state(60, 85, 95), "idle")
+check("temp state warm", SYS.temperature_state(88, 85, 95), "warm")
+check("temp state hot", SYS.temperature_state(96, 85, 95), "hot")
+check("temp state without a sensor", SYS.temperature_state(None, 85, 95), "idle")
+
+ENTRIES = [
+    {"key": "nvme/Composite", "chip": "nvme", "label": "Composite"},
+    {"key": "k10temp/Tctl", "chip": "k10temp", "label": "Tctl"},
+    {"key": "iwlwifi_1/temp1", "chip": "iwlwifi_1", "label": "temp1"},
+]
+check("auto pick prefers the CPU chip", SYS.pick_sensor(ENTRIES)["key"], "k10temp/Tctl")
+check("configured sensor wins", SYS.pick_sensor(ENTRIES, "nvme/Composite")["key"], "nvme/Composite")
+check("vanished sensor falls back to auto", SYS.pick_sensor(ENTRIES, "gone/x")["key"], "k10temp/Tctl")
+check("no sensors at all", SYS.pick_sensor([]), None)
+check(
+    "intel package beats a bare core",
+    SYS.pick_sensor(
+        [
+            {"key": "coretemp/Core 0", "chip": "coretemp", "label": "Core 0"},
+            {"key": "coretemp/Package id 0", "chip": "coretemp", "label": "Package id 0"},
+        ]
+    )["key"],
+    "coretemp/Package id 0",
+)
+check("a rate needs two samples", SYS.CpuSampler().sample(), None)
+check("net sampler starts empty", SYS.NetSampler().sample(["lo"]), {})
+
+with tempfile.TemporaryDirectory() as tmp:
+    dpm = Path(tmp) / "pp_dpm_sclk"
+    dpm.write_text("0: 500Mhz\n1: 1000Mhz *\n2: 1700Mhz\n")
+    check("amd dpm picks the active step", GPU._current_dpm(dpm), 1000)
+    dpm.write_text("0: 500Mhz\n1: 1000Mhz\n")
+    check("amd dpm with nothing active", GPU._current_dpm(dpm), None)
+    check("amd dpm on a missing file", GPU._current_dpm(Path(tmp) / "nope"), None)
+
 # ---------------------------------------------------------------------- icons
 wanted = set(W.GROUP_ICON.values()) | set(W.NIGHT_ICON.values())
 wanted |= {f"crypto-{k}" for k in (C.UP, C.DOWN, C.FLAT)} | {"crypto-error"}
+wanted |= {f"system-{s}" for s in ("idle", "warm", "hot")}
 missing = sorted(n for n in wanted if not (ICON_DIR / f"{n}.svg").exists())
 check("every weather/crypto icon exists", missing, [])
 check("every WMO group has an icon", sorted(set(W.WMO_GROUP.values()) - set(W.GROUP_ICON)), [])

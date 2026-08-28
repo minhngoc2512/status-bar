@@ -7,16 +7,18 @@ Ba chỉ báo GTK trên thanh trạng thái Ubuntu/GNOME, chạy chung một ti�
 | **Claude Code** | trạng thái mọi session: đang xử lý / chờ confirm / task nền / lỗi / rảnh |
 | **Thời tiết** | nhiệt độ + điều kiện hiện tại, tự dò vị trí theo IP hoặc chọn thành phố |
 | **Crypto** | giá và biến động 24h từ API công khai của Binance |
+| **Phần cứng** | tải + nhiệt độ CPU, RAM, GPU (tải/nhiệt/VRAM/xung), tốc độ mạng |
 
 ```
 ◐ working 2     ← 2 session Claude đang chạy (spinner quay)
 ● confirm       ← có session đang chờ bạn duyệt (nhấp nháy)
 ☔ 28°C         ← thời tiết
 📈 BTC 79,659 ▲1.18%
+🔲 CPU 20%  81°C  RAM 74%  GPU 14% 48°C  ↓2.4K ↑1.7K
 ```
 
-Mỗi chỉ báo **bật/tắt độc lập** trong cửa sổ Cài đặt. Thời tiết và crypto mặc định **tắt** —
-cài mới hoặc nâng cấp đều không đổi hành vi sẵn có.
+Mỗi chỉ báo **bật/tắt độc lập** trong cửa sổ Cài đặt. Thời tiết, crypto và phần cứng mặc
+định **tắt** — cài mới hoặc nâng cấp đều không đổi hành vi sẵn có.
 
 Không cần API key. Không cần thư viện Python ngoài stdlib + PyGObject.
 
@@ -32,6 +34,7 @@ Không cần API key. Không cần thư viện Python ngoài stdlib + PyGObject.
 | Desktop | GNOME Shell 42.9, phiên **X11** |
 | Python | 3.10.12 |
 | AppIndicator | `gir1.2-ayatanaappindicator3-0.1` 0.5.90 + extension `ubuntu-appindicators@ubuntu.com` |
+| Phần cứng | AMD Ryzen 5 4600H (`k10temp`), NVIDIA GTX 1650 Ti Mobile (driver 580, NVML) |
 
 **Yêu cầu tối thiểu**
 
@@ -42,10 +45,14 @@ Không cần API key. Không cần thư viện Python ngoài stdlib + PyGObject.
   GNOME thuần cần `sudo apt install gnome-shell-extension-appindicator`
 - Mạng ra ngoài: `api.open-meteo.com`, `geocoding-api.open-meteo.com`, `ipwho.is`,
   `ipapi.co`, `ip-api.com` (HTTP), `api.binance.com` — chỉ khi bật thời tiết/crypto
+- Theo dõi phần cứng chỉ đọc `/proc` và `/sys`, không cần quyền root. GPU cần thêm:
+  driver NVIDIA (dùng `libnvidia-ml.so`, tức NVML), hoặc card AMD/Intel phơi
+  `amdgpu`/`i915` trong `/sys/class/drm`. Không có gì đọc được thì phần GPU tự tắt.
 
 **Kỳ vọng chạy được nhưng chưa test**
 
 - Ubuntu 20.04 / 24.04 / 25.04 — đủ gói phụ thuộc trong repo chính
+- GPU AMD (`amdgpu`) và Intel (`i915`) qua sysfs — code có, nhưng máy test chỉ có NVIDIA
 - Phiên **Wayland** — AppIndicator đi qua D-Bus (StatusNotifierItem), không phụ thuộc X
 - Debian 11+, Linux Mint, Pop!_OS
 - KDE Plasma, XFCE (+ `xfce4-statusnotifier-plugin`), Cinnamon, MATE, Budgie —
@@ -127,6 +134,10 @@ chọn trong danh sách), đơn vị °C/°F, chu kỳ cập nhật 5–180 phú
 `BNBUSDT`, `BNBUSDC`, `BNBBTC`… bấm để thêm), mã nào hiện trên thanh trạng thái,
 chu kỳ 15–600 giây, hiện/ẩn giá và biến động 24h, endpoint API.
 
+**Hệ thống** — chọn chỉ số nào hiện trên thanh trạng thái (tải CPU, nhiệt CPU, RAM, tải GPU,
+nhiệt GPU, tốc độ mạng), chu kỳ 1–30 giây, cảm biến nhiệt CPU, ngưỡng cảnh báo/nguy hiểm,
+**cổng mạng** (tự động hoặc chọn tay), đơn vị tốc độ, bật/tắt đọc GPU.
+
 Mọi thay đổi áp dụng ngay, không có nút OK/Cancel. Lưu ở
 `~/.config/claude-status/config.json`:
 
@@ -143,11 +154,16 @@ Mọi thay đổi áp dụng ngay, không có nút OK/Cancel. Lưu ở
     "enabled": true, "symbols": ["BTCUSDT", "ETHUSDT"], "bar_symbol": "BTCUSDT",
     "refresh_seconds": 60, "show_change": true, "show_label": true,
     "endpoint": "https://api.binance.com"
+  },
+  "system": {
+    "enabled": true, "refresh_seconds": 3, "show_label": true,
+    "bar_metrics": ["cpu", "temp"], "temp_sensor": "", "warn_celsius": 85,
+    "hot_celsius": 95, "net_unit": "bytes", "interfaces": [], "gpu": true
   }
 }
 ```
 
-Tắt hết ba chỉ báo thì một icon dự phòng hiện ra, chỉ có **Cài đặt…** và **Thoát** — để
+Tắt hết các chỉ báo thì một icon dự phòng hiện ra, chỉ có **Cài đặt…** và **Thoát** — để
 bạn còn đường quay lại.
 
 ---
@@ -231,6 +247,34 @@ Số lẻ tự co giãn theo độ lớn: `79,697.28` nhưng `0.00004312`.
 
 ---
 
+## Chỉ báo hệ thống
+
+Đọc thẳng `/proc` và `/sys`, không cần `psutil`, không gọi lệnh ngoài.
+
+| Chỉ số | Nguồn |
+| :--- | :--- |
+| Tải CPU | delta `/proc/stat` giữa hai lần lấy mẫu |
+| Load average, uptime | `/proc/loadavg`, `/proc/uptime` |
+| Nhiệt độ CPU | `/sys/class/hwmon/*/temp*_input`, fallback `/sys/class/thermal` |
+| RAM, swap | `/proc/meminfo` (dùng `MemAvailable`, không phải `total − free`) |
+| Tốc độ mạng | delta `/proc/net/dev` |
+| GPU NVIDIA | `libnvidia-ml.so` (NVML) qua `ctypes` |
+| GPU AMD / Intel | `/sys/class/drm/card*/device/` — `gpu_busy_percent`, `mem_info_vram_*`, `pp_dpm_sclk` |
+
+**Chọn cảm biến nhiệt.** Máy thường có nhiều cảm biến (`k10temp`, `nvme`, `iwlwifi`…).
+Chế độ tự động ưu tiên chip CPU theo thứ tự `k10temp → zenpower → coretemp → cpu_thermal →
+acpitz`, trong chip thì ưu tiên nhãn `Tctl → Tdie → Package id 0`. Chọn tay được trong Cài đặt;
+key lưu dạng `chip/nhãn` vì số thứ tự `hwmonN` **không ổn định qua mỗi lần khởi động**.
+
+**Chọn cổng mạng.** Mặc định tự động: bám theo cổng mang default route trong `/proc/net/route`,
+nên rút dây mạng là tự chuyển sang wifi mà không phải vào Cài đặt. Chọn tay cũng được — danh
+sách chỉ hiện card vật lý, lọc bằng cách kiểm tra symlink `/sys/class/net/<if>/device`. Cách
+lọc này loại sạch `lo`, `docker0`, `br-*`, `veth*`, `tun*` trong một bước; máy đang chạy
+container có thể có vài chục interface ảo và cộng hết vào sẽ đếm trùng mọi byte.
+
+**Không có GPU thì phần GPU tự tắt** và Cài đặt hiện cảnh báo nói rõ cần gì, thay vì bày một
+ô tick không làm gì cả.
+
 ## Vận hành
 
 ```bash
@@ -270,6 +314,16 @@ cho exit 0, stdout 0 byte.
 tới **~4 fps**. Nên icon để tĩnh, spinner `◐◓◑◒` chạy ở label. Braille (`⠋⠙⠹`) không
 có glyph trong font panel — hiện ra thành dấu chấm lộn xộn, đừng dùng.
 
+**Lấy mẫu phần cứng chia hai nhịp.** Không phải file nào trong `/sys` cũng rẻ như nhau: đọc
+`k10temp` mất 0.03 ms nhưng mỗi cảm biến NVMe mất ~0.6 ms (thao tác đọc đánh thức controller
+ổ cứng), và mỗi truy vấn xung/điện năng của NVML mất ~1.2–1.4 ms. Nên mỗi tick chỉ đọc đúng
+cảm biến đang hiển thị cộng vài counter GPU rẻ; danh sách cảm biến đầy đủ, xung GPU và điện
+năng chạy ở nhịp chậm hơn 8 lần vì chúng chỉ xuất hiện trong menu.
+
+**NVML chứ không phải `nvidia-smi`.** Đo trên GTX 1650 Ti driver 580: một truy vấn
+`nvidia-smi` đầy đủ tốn ~37 ms, cùng ngần ấy thông tin qua NVML tốn ~4.8 ms. Ở nhịp 3 giây
+trên GTK main loop thì subprocess thấy khựng, còn shared library thì không.
+
 **Ghi config là merge, không phải ghi đè.** `Config.save()` đọc lại file trên đĩa rồi
 replay đúng những key mà tiến trình đó đã đổi. Nếu dump thẳng bản chụp trong bộ nhớ thì
 service và một instance thứ hai (chạy thử từ terminal) sẽ lặng lẽ xoá thay đổi của nhau —
@@ -295,9 +349,18 @@ Panel Claude giữ nguyên id `claude-status` cũ để vị trí trên bar khô
 không fire. TTL 6 giờ sẽ dọn, hoặc dùng *Bỏ khỏi danh sách* / *Xóa hết session*.
 Cột thời gian trong menu giúp nhận ra session bị kẹt.
 
-**Chi phí.** Indicator ~0.35% CPU khi idle, ~0.45% khi có spinner; gnome-shell tăng
-thêm khoảng 0.3%. Hook thêm khoảng 2–3 ms mỗi tool call (một `cat` + một `mv`).
-Thời tiết mặc định 1 request/30 phút, crypto 1 request/60 giây.
+**Chi phí.** Đo trên máy test, mỗi cấu hình 24 giây:
+
+| Bật những gì | CPU của tiến trình |
+| :--- | ---: |
+| Chỉ chỉ báo Claude | 0.17% |
+| + thời tiết + crypto | 0.17% |
+| + hệ thống, nhịp 3 giây, đủ 6 chỉ số và GPU | 0.67% |
+
+Thời tiết và crypto gần như miễn phí vì chúng chỉ gọi mạng 30 phút / 60 giây một lần. Phần
+lớn chi phí của chỉ báo hệ thống là dựng lại menu GTK chứ không phải đọc file; tăng chu kỳ
+lên 5–10 giây trong Cài đặt là giảm tương ứng. gnome-shell tăng thêm khoảng 0.3%.
+Hook thêm khoảng 2–3 ms mỗi tool call (một `cat` + một `mv`).
 
 ---
 
@@ -311,13 +374,16 @@ claude_status/
   claude_panel.py         panel Claude Code (spool, state machine, spinner)
   weather.py              panel + client Open-Meteo + dò IP
   crypto.py               panel + client Binance + format giá
+  system.py               đọc CPU/RAM/nhiệt/mạng từ /proc và /sys
+  system_panel.py         panel hệ thống
+  gpu.py                  backend GPU: NVML cho NVIDIA, sysfs cho AMD/Intel
   prefs.py                cửa sổ GTK Cài đặt
   config.py               config dotted-path, deep-merge, notify listener
   sessions.py             Session / Store — máy trạng thái từ hook event
   i18n.py                 bảng dịch EN/VI
   net.py                  fetch JSON non-blocking
   paths.py                định vị icon (checkout hay /usr/lib đều đúng)
-gen_icons.py              sinh 19 icon SVG
+gen_icons.py              sinh 22 icon SVG
 hooks/emit.sh             hook Claude Code
 merge_settings.py         merge hook vào ~/.claude/settings.json
 packaging/                control, systemd unit, .desktop, copyright, maintainer scripts
@@ -328,7 +394,7 @@ build-deb.sh              đóng gói .deb
 
 ```bash
 python3 test_store.py      # 29 assertion: state machine, i18n, icon
-python3 test_features.py   # 57 assertion: config, thời tiết, crypto, icon
+python3 test_features.py   # 82 assertion: config, thời tiết, crypto, hệ thống, GPU, icon
 ```
 
 ## Giấy phép

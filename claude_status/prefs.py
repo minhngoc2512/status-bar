@@ -9,6 +9,8 @@ from __future__ import annotations
 from gi.repository import GLib, Gtk
 
 from . import crypto as crypto_mod
+from . import gpu as gpu_mod
+from . import system as sysinfo
 from . import weather as weather_mod
 from .i18n import LANGUAGES
 
@@ -85,6 +87,7 @@ class Preferences(Gtk.Window):
             (self.build_general, "prefs.tab.general"),
             (self.build_weather, "prefs.tab.weather"),
             (self.build_crypto, "prefs.tab.crypto"),
+            (self.build_system, "prefs.tab.system"),
         ):
             notebook.append_page(scroller(build(), 0), Gtk.Label(label=self.t(title)))
         outer.pack_start(notebook, True, True, 0)
@@ -129,10 +132,13 @@ class Preferences(Gtk.Window):
         box.pack_start(row, False, False, 0)
         row, self.sw_crypto = switch_row(self.t("prefs.show.crypto"))
         box.pack_start(row, False, False, 0)
+        row, self.sw_system = switch_row(self.t("prefs.show.system"))
+        box.pack_start(row, False, False, 0)
         for switch, section in (
             (self.sw_claude, "claude"),
             (self.sw_weather, "weather"),
             (self.sw_crypto, "crypto"),
+            (self.sw_system, "system"),
         ):
             switch.connect("notify::active", self.on_toggle_section, section)
         page.pack_start(holder, False, False, 0)
@@ -541,6 +547,178 @@ class Preferences(Gtk.Window):
         self.combo_bar.set_active_id(bar if bar in symbols else (symbols[0] if symbols else None))
         self.loading = was_loading
 
+    # ----------------------------------------------------------------- system
+
+    METRICS = ("cpu", "temp", "ram", "gpu", "gpu_temp", "net")
+
+    def build_system(self) -> Gtk.Box:
+        page = self.page()
+
+        row, self.sw_system_on = switch_row(self.t("prefs.show.system"))
+        self.sw_system_on.connect("notify::active", self.on_toggle_section, "system")
+        page.pack_start(row, False, False, 0)
+
+        holder, box = frame(self.t("prefs.metrics"))
+        self.chk_metric = {}
+        for metric in self.METRICS:
+            check = Gtk.CheckButton(label=self.t(f"prefs.metric.{metric}"))
+            check.connect("toggled", self.on_metric_toggled, metric)
+            box.pack_start(check, False, False, 0)
+            self.chk_metric[metric] = check
+
+        self.spin_system = Gtk.SpinButton.new_with_range(1, 30, 1)
+        self.spin_system.connect(
+            "value-changed", lambda s: self.write("system.refresh_seconds", s.get_value_as_int())
+        )
+        box.pack_start(control_row(self.t("prefs.refresh.sec"), self.spin_system), False, False, 0)
+
+        self.chk_system_label = Gtk.CheckButton(label=self.t("prefs.showlabel"))
+        self.chk_system_label.connect(
+            "toggled", lambda w: self.write("system.show_label", w.get_active())
+        )
+        box.pack_start(self.chk_system_label, False, False, 0)
+        page.pack_start(holder, False, False, 0)
+
+        holder, box = frame(self.t("prefs.sensor"))
+        self.combo_sensor = Gtk.ComboBoxText()
+        self.combo_sensor.connect("changed", self.on_sensor_changed)
+        box.pack_start(self.combo_sensor, False, False, 0)
+        self.label_sensor = dim("")
+        box.pack_start(self.label_sensor, False, False, 0)
+
+        self.spin_warn = Gtk.SpinButton.new_with_range(40, 110, 1)
+        self.spin_warn.connect(
+            "value-changed", lambda s: self.write("system.warn_celsius", s.get_value_as_int())
+        )
+        box.pack_start(control_row(self.t("prefs.warn"), self.spin_warn), False, False, 0)
+
+        self.spin_hot = Gtk.SpinButton.new_with_range(45, 120, 1)
+        self.spin_hot.connect(
+            "value-changed", lambda s: self.write("system.hot_celsius", s.get_value_as_int())
+        )
+        box.pack_start(control_row(self.t("prefs.hot"), self.spin_hot), False, False, 0)
+        page.pack_start(holder, False, False, 0)
+
+        holder, box = frame(self.t("prefs.network"))
+        self.combo_iface = Gtk.ComboBoxText()
+        self.combo_iface.connect("changed", self.on_iface_changed)
+        box.pack_start(control_row(self.t("prefs.iface"), self.combo_iface), False, False, 0)
+        box.pack_start(dim(self.t("prefs.iface.hint")), False, False, 0)
+
+        self.combo_netunit = Gtk.ComboBoxText()
+        self.combo_netunit.append("bytes", self.t("prefs.netunit.bytes"))
+        self.combo_netunit.append("bits", self.t("prefs.netunit.bits"))
+        self.combo_netunit.connect(
+            "changed", lambda c: self.write("system.net_unit", c.get_active_id() or "bytes")
+        )
+        box.pack_start(control_row(self.t("prefs.netunit"), self.combo_netunit), False, False, 0)
+        page.pack_start(holder, False, False, 0)
+
+        holder, box = frame(self.t("prefs.gpu"))
+        self.chk_gpu = Gtk.CheckButton(label=self.t("prefs.gpu.enable"))
+        self.chk_gpu.connect("toggled", lambda w: self.write("system.gpu", w.get_active()))
+        box.pack_start(self.chk_gpu, False, False, 0)
+        self.label_gpu = dim("")
+        box.pack_start(self.label_gpu, False, False, 0)
+        page.pack_start(holder, False, False, 0)
+
+        return page
+
+    def on_metric_toggled(self, check: Gtk.CheckButton, metric: str) -> None:
+        if self.loading:
+            return
+        # Rebuild from the canonical order so the label reads the same however
+        # the boxes were ticked.
+        chosen = [m for m in self.METRICS if self.chk_metric[m].get_active()]
+        self.write("system.bar_metrics", chosen)
+
+    def on_sensor_changed(self, combo: Gtk.ComboBoxText) -> None:
+        value = combo.get_active_id()
+        if value is not None:
+            self.write("system.temp_sensor", "" if value == "auto" else value)
+
+    def on_iface_changed(self, combo: Gtk.ComboBoxText) -> None:
+        value = combo.get_active_id()
+        if value is not None:
+            self.write("system.interfaces", [] if value == "auto" else [value])
+
+    def load_system(self) -> None:
+        was_loading, self.loading = self.loading, True
+        try:
+            enabled = bool(self.cfg.get("system.enabled", False))
+            for switch in (self.sw_system, self.sw_system_on):
+                switch.set_active(enabled)
+
+            chosen = set(self.cfg.get("system.bar_metrics") or [])
+            for metric, check in self.chk_metric.items():
+                check.set_active(metric in chosen)
+            self.spin_system.set_value(int(self.cfg.get("system.refresh_seconds", 3) or 3))
+            self.chk_system_label.set_active(bool(self.cfg.get("system.show_label", True)))
+
+            # -- temperature sensors
+            sensors = sysinfo.list_sensors()
+            auto = sysinfo.pick_sensor(sensors)
+            self.combo_sensor.remove_all()
+            self.combo_sensor.append(
+                "auto",
+                self.t("prefs.sensor.auto", name=auto["key"]) if auto else self.t("prefs.sensor.auto", name="—"),
+            )
+            for sensor in sensors:
+                self.combo_sensor.append(sensor["key"], f"{sensor['key']}   {sensor['celsius']:.0f}°C")
+            wanted = self.cfg.get("system.temp_sensor") or ""
+            keys = {s["key"] for s in sensors}
+            self.combo_sensor.set_active_id(wanted if wanted in keys else "auto")
+            self.combo_sensor.set_sensitive(bool(sensors))
+            self.label_sensor.set_markup(
+                "" if sensors else f"<small>{GLib.markup_escape_text(self.t('prefs.sensor.none'))}</small>"
+            )
+            self.spin_warn.set_value(int(self.cfg.get("system.warn_celsius", 85) or 85))
+            self.spin_hot.set_value(int(self.cfg.get("system.hot_celsius", 95) or 95))
+
+            # -- network interfaces
+            self.combo_iface.remove_all()
+            auto_ifaces = sysinfo.auto_interfaces()
+            self.combo_iface.append(
+                "auto",
+                self.t("prefs.iface.auto", name=auto_ifaces[0])
+                if auto_ifaces
+                else self.t("prefs.iface.autonone"),
+            )
+            names = sysinfo.physical_interfaces()
+            for name in names:
+                self.combo_iface.append(
+                    name,
+                    self.t(
+                        "prefs.iface.row",
+                        name=name,
+                        kind=self.t(f"prefs.iface.{sysinfo.interface_kind(name)}"),
+                        state=self.t("prefs.iface.up" if sysinfo.interface_up(name) else "prefs.iface.down"),
+                    ),
+                )
+            configured = [n for n in (self.cfg.get("system.interfaces") or []) if n in names]
+            self.combo_iface.set_active_id(configured[0] if configured else "auto")
+            self.combo_netunit.set_active_id(self.cfg.get("system.net_unit") or "bytes")
+
+            # -- gpu: nothing to configure when there is nothing to read
+            backend = gpu_mod.shared()
+            self.chk_gpu.set_active(bool(self.cfg.get("system.gpu", True)) and backend is not None)
+            self.chk_gpu.set_sensitive(backend is not None)
+            for metric in ("gpu", "gpu_temp"):
+                self.chk_metric[metric].set_sensitive(backend is not None)
+            if backend is not None:
+                self.label_gpu.set_markup(
+                    f'<span alpha="70%"><small>'
+                    f'{GLib.markup_escape_text(self.t("prefs.gpu.found", name=backend.name))}'
+                    f"</small></span>"
+                )
+            else:
+                self.label_gpu.set_markup(
+                    f'<span foreground="#c85a17"><small>'
+                    f'{GLib.markup_escape_text(self.t("prefs.gpu.none"))}</small></span>'
+                )
+        finally:
+            self.loading = was_loading
+
     # ------------------------------------------------------------------ load
 
     def load_values(self) -> None:
@@ -570,6 +748,7 @@ class Preferences(Gtk.Window):
         finally:
             self.loading = False
         self.load_symbols()
+        self.load_system()
 
     def on_config_changed(self, _sections: set) -> None:
         """Reflect changes made from the tray menus while the window is open."""
