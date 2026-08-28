@@ -8,7 +8,7 @@ from .claude_panel import ClaudePanel
 from .config import Config
 from .crypto import CryptoPanel
 from .i18n import Lang, default_lang
-from .panel import Panel
+from .panel import Panel, install_font_metrics
 from .prefs import Preferences
 from .system_panel import SystemPanel
 from .weather import WeatherPanel
@@ -36,6 +36,7 @@ class FallbackPanel(Panel):
 
 class App:
     def __init__(self) -> None:
+        install_font_metrics()
         self.cfg = Config()
         self.t = Lang(self.cfg.get("lang") or default_lang())
         self.prefs: Preferences | None = None

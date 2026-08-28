@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from claude_status import crypto as C  # noqa: E402
 from claude_status import gpu as GPU  # noqa: E402
+from claude_status import labels as L  # noqa: E402
 from claude_status import system as SYS  # noqa: E402
 from claude_status import weather as W  # noqa: E402
 from claude_status.config import DEFAULTS, Config, merged  # noqa: E402
@@ -81,6 +82,37 @@ check(
 check("ip provider error is rejected", W.accept_ip({"error": True, "reason": "RateLimited"}), None)
 check("ip provider failure is rejected", W.accept_ip({"status": "fail"}), None)
 
+# ------------------------------------------------------- constant-width labels
+# The status area is right-aligned, so any label that changes width shoves every
+# indicator to its left. These invariants are what stop that.
+FIG, PT = "\u2007", "\u2008"
+
+check("pad uses digit-width spaces", L.pad("7", 3), FIG + FIG + "7")
+check("pad leaves a full field alone", L.pad("100", 3), "100")
+check("a decimal spends the point slot", L.pad_number("1.1"), FIG + "1.1")
+check("no decimal borrows a point space", L.pad_number("12"), PT + FIG + "12")
+check("a full field still gets its point space", L.pad_number("512"), PT + "512")
+check("pad_number is always four cells", {len(L.pad_number(x)) for x in ("0.0", "1.1", "12", "512")}, {4})
+
+SWEEP = [0, 1, 512, 1023, 1024, 1150, 12_000, 999_999, 1 << 20, 5.2e6, 1 << 30, 1.4e9, 9.9e11]
+check("every byte rate is one length", {len(L.rate(v)) for v in SWEEP}, {5})
+check("every bit rate is one length", {len(L.rate(v, "bits")) for v in SWEEP}, {6})
+check("byte rate reads sensibly", L.rate(1150), FIG + "1.1K")
+check("bit rate never drops below kb", L.rate(0, "bits"), FIG + "0.0kb")
+check("every percent is one length", {len(L.percent(v)) for v in (0, 7, 42, 100)}, {4})
+check("every temperature is one length", {len(L.temperature(v)) for v in (9, 46, 101)}, {5})
+check("percent of garbage", L.percent(None), FIG + FIG + "-%")
+
+# Unit letters have no space character defined against them, so they are matched
+# by measuring the font. Without a measurer installed nothing is added.
+check("no font metrics means no unit padding", L.rate(1150).endswith("1.1K"), True)
+WIDTHS = {FIG: 8, PT: 4, "\u2009": 3, "\u200a": 2, "B": 10, "K": 9, "M": 13, "G": 10}
+L.use_font_metrics(lambda text: WIDTHS.get(text, 8 * len(text)))
+check("narrow unit gets filled to the widest", L.unit_fill("K", ("B", "K", "M", "G")), PT),
+check("the widest unit gets nothing", L.unit_fill("M", ("B", "K", "M", "G")), "")
+check("padding goes in front, never trailing", L.rate(1150)[-1], "K")
+L.use_font_metrics(None)
+
 # --------------------------------------------------------------------- crypto
 check("typed slash is stripped", C.normalise_symbol("BNB/USDT"), "BNBUSDT")
 check("typed dash and case", C.normalise_symbol("bnb-usdt"), "BNBUSDT")
@@ -123,8 +155,6 @@ check("bytes of nothing", SYS.format_bytes(0), "0B")
 check("rate in KB/s", SYS.format_rate(1150), "1.1 KB/s")
 check("rate of nothing has one B", SYS.format_rate(0), "0 B/s")
 check("rate in bits", SYS.format_rate(1150, "bits"), "9.2 kbps")
-check("short rate for the tray", SYS.format_rate_short(1150), "1.1K")
-check("short rate in bits", SYS.format_rate_short(1150, "bits"), "9.2kb")
 check("uptime in days", SYS.format_uptime(2 * 86400 + 3 * 3600), "2d 3h")
 check("uptime in hours", SYS.format_uptime(3 * 3600 + 5 * 60), "3h 05m")
 check("uptime in minutes", SYS.format_uptime(300), "5m")

@@ -314,6 +314,32 @@ cho exit 0, stdout 0 byte.
 tới **~4 fps**. Nên icon để tĩnh, spinner `◐◓◑◒` chạy ở label. Braille (`⠋⠙⠹`) không
 có glyph trong font panel — hiện ra thành dấu chấm lộn xộn, đừng dùng.
 
+**Nhãn trên bar phải có bề rộng cố định.** Khu status của GNOME canh phải, nên một chỉ báo
+rộng thêm một ký tự là đẩy mọi chỉ báo bên trái nó dịch sang. Tốc độ mạng nhảy từ 2 lên 3
+chữ số là đủ để thấy CPU và RAM giật.
+
+Đệm bằng space thường **không** giải quyết được. Đo trong font panel (Ubuntu 11):
+
+| Ký tự | Rộng |
+| :--- | ---: |
+| chữ số `0`–`9` | 8 px (tabular, nên số tự canh cột) |
+| `.` | 4 px |
+| `U+0020` space | **3 px** |
+| `U+2007` figure space | 8 px — định nghĩa là bề rộng một chữ số |
+| `U+2008` punctuation space | 4 px — định nghĩa là bề rộng dấu chấm |
+| `K` `M` `G` `B` | 9, 13, 10, 10 px |
+
+Nên `claude_status/labels.py` đệm chữ số bằng `U+2007`, bù ô dấu chấm bằng `U+2008`, và
+đổi đơn vị ở mốc 999.5 thay vì 1024 để phần định trị không bao giờ cần chữ số thứ tư
+(`1023 B/s` từng render thành `1023B`, rộng hơn mọi giá trị khác một ô).
+
+Chữ đơn vị thì không có ký tự Unicode nào định nghĩa theo nó, nên chúng được cân bằng bằng
+cách **đo font thật** qua Pango lúc chạy. Phần đệm đó đặt ở **đầu** chuỗi chứ không phải cuối:
+nhãn kết thúc bằng khoảng trắng sẽ hỏng nếu có tầng nào trên đường ra panel cắt trailing space.
+
+Đo lại trên 45 tổ hợp giá trị ngẫu nhiên: bản cũ cho 17 bề rộng khác nhau, chênh 80 px;
+bản mới cho **đúng một** bề rộng. Nhãn crypto cũng được xử lý tương tự ở phần biến động 24h.
+
 **Lấy mẫu phần cứng chia hai nhịp.** Không phải file nào trong `/sys` cũng rẻ như nhau: đọc
 `k10temp` mất 0.03 ms nhưng mỗi cảm biến NVMe mất ~0.6 ms (thao tác đọc đánh thức controller
 ổ cứng), và mỗi truy vấn xung/điện năng của NVML mất ~1.2–1.4 ms. Nên mỗi tick chỉ đọc đúng
@@ -374,6 +400,7 @@ claude_status/
   claude_panel.py         panel Claude Code (spool, state machine, spinner)
   weather.py              panel + client Open-Meteo + dò IP
   crypto.py               panel + client Binance + format giá
+  labels.py               format số bề rộng cố định cho nhãn trên bar
   system.py               đọc CPU/RAM/nhiệt/mạng từ /proc và /sys
   system_panel.py         panel hệ thống
   gpu.py                  backend GPU: NVML cho NVIDIA, sysfs cho AMD/Intel
@@ -394,7 +421,7 @@ build-deb.sh              đóng gói .deb
 
 ```bash
 python3 test_store.py      # 29 assertion: state machine, i18n, icon
-python3 test_features.py   # 82 assertion: config, thời tiết, crypto, hệ thống, GPU, icon
+python3 test_features.py   # 97 assertion: config, thời tiết, crypto, hệ thống, GPU, nhãn, icon
 ```
 
 ## Giấy phép

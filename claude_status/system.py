@@ -369,11 +369,6 @@ def format_rate(bytes_per_second: float, unit: str = "bytes") -> str:
     return f"{number} {suffix}ps" if unit == "bits" else f"{number} {suffix}/s"
 
 
-def format_rate_short(bytes_per_second: float, unit: str = "bytes") -> str:
-    """Tray-label form: "1.1K", "9.0Mb" -- the icon supplies the context."""
-    number, suffix = scale_rate(bytes_per_second, unit)
-    return f"{number}{suffix[:-1] if suffix.endswith('B') and len(suffix) > 1 else suffix}"
-
 
 def format_uptime(seconds: float) -> str:
     seconds = int(seconds)

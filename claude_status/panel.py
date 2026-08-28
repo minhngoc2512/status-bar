@@ -17,12 +17,33 @@ except (ValueError, ImportError):  # older systems ship the unprefixed one
     gi.require_version("AppIndicator3", "0.1")
     from gi.repository import AppIndicator3 as AppIndicator
 
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import Gtk, Pango  # noqa: E402
 
+from . import labels
 from .paths import APP_ID, icon_path
 
 ACTIVE = AppIndicator.IndicatorStatus.ACTIVE
 PASSIVE = AppIndicator.IndicatorStatus.PASSIVE
+
+
+def install_font_metrics() -> None:
+    """Let labels.py measure text in the toolkit font.
+
+    This is the GTK font, not the shell theme's panel font -- there is no API to
+    ask gnome-shell what it renders indicator labels in. On Ubuntu they are the
+    same family, and being one font off is still far better than assuming every
+    glyph is the same width.
+    """
+    try:
+        layout = Pango.Layout(Gtk.Label().get_pango_context())
+    except Exception:  # noqa: BLE001 - headless or no display
+        return
+
+    def measure(text: str) -> int:
+        layout.set_text(text, -1)
+        return layout.get_pixel_size().width
+
+    labels.use_font_metrics(measure)
 
 
 class Panel:

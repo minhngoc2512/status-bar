@@ -14,6 +14,7 @@ import urllib.parse
 
 from gi.repository import Gdk, GLib, Gtk
 
+from . import labels
 from .net import fetch_json
 from .panel import Panel
 from .sessions import human_age
@@ -269,7 +270,10 @@ class CryptoPanel(Panel):
             base = split_symbol(symbol)[0]
             label = f"{base} {format_price(row.get('lastPrice'), compact=True)}"
             if self.cfg.get("crypto.show_change", True):
-                label = f"{label} {ARROW[way]}{format_percent(row.get('priceChangePercent'), signed=False)}"
+                # Padded for the same reason as the system panel: 9.9% -> 10.1%
+                # would otherwise nudge every indicator to the left.
+                change = labels.pad(format_percent(row.get("priceChangePercent"), signed=False), 6)
+                label = f"{label} {ARROW[way]}{change}"
             if not self.cfg.get("crypto.show_label", True):
                 label = ""
             self.set_icon(f"crypto-{way}", t("crypto.title"))

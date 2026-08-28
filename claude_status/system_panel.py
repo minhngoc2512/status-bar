@@ -5,6 +5,7 @@ from __future__ import annotations
 from gi.repository import GLib, Gtk
 
 from . import gpu as gpu_mod
+from . import labels
 from . import system as sysinfo
 from .panel import Panel
 
@@ -143,35 +144,42 @@ class SystemPanel(Panel):
     # ------------------------------------------------------------------- ui
 
     def bar_label(self) -> str:
+        """Every number is padded to a constant width.
+
+        The status area is right-aligned, so a value growing a digit shifts
+        every indicator to the left of this one. See claude_status/labels.py.
+        """
         if not self.cfg.get("system.show_label", True):
             return ""
         wanted = set(self.cfg.get("system.bar_metrics") or [])
         unit = self.cfg.get("system.net_unit", "bytes")
         parts = []
 
-        if "cpu" in wanted and self.cpu is not None:
-            parts.append(f"CPU {self.cpu:.0f}%")
-        if "temp" in wanted and self.cpu_sensor:
-            parts.append(f"{self.cpu_sensor['celsius']:.0f}°C")
+        # A rate needs two samples, so the first tick has no CPU or network
+        # figure yet. Render a same-width placeholder rather than dropping the
+        # field, which would make the whole label jump once on startup.
+        if "cpu" in wanted:
+            parts.append(f"CPU {labels.percent(self.cpu)}")
+        if "temp" in wanted and self.cpu_entry:
+            parts.append(labels.temperature((self.cpu_sensor or {}).get("celsius")))
         if "ram" in wanted and self.memory.get("total"):
-            parts.append(f"RAM {self.memory['percent']:.0f}%")
+            parts.append(f"RAM {labels.percent(self.memory['percent'])}")
 
         # GPU load and GPU temperature share one "GPU" prefix so the label does
         # not read "GPU 38% GPU 46°C".
         gpu_bits = []
-        if self.gpu:
-            if "gpu" in wanted and self.gpu.get("utilisation") is not None:
-                gpu_bits.append(f"{self.gpu['utilisation']:.0f}%")
-            if "gpu_temp" in wanted and self.gpu.get("temperature") is not None:
-                gpu_bits.append(f"{self.gpu['temperature']:.0f}°C")
+        if self.gpu_wanted():
+            reading = self.gpu or {}
+            if "gpu" in wanted:
+                gpu_bits.append(labels.percent(reading.get("utilisation")))
+            if "gpu_temp" in wanted:
+                gpu_bits.append(labels.temperature(reading.get("temperature")))
         if gpu_bits:
             parts.append("GPU " + " ".join(gpu_bits))
 
-        if "net" in wanted and self.rates:
+        if "net" in wanted and (self.rates or self.interfaces()):
             down, up = self.totals()
-            parts.append(
-                f"↓{sysinfo.format_rate_short(down, unit)} ↑{sysinfo.format_rate_short(up, unit)}"
-            )
+            parts.append(f"↓{labels.rate(down, unit)} ↑{labels.rate(up, unit)}")
         return "  ".join(parts)
 
     def refresh(self) -> None:
