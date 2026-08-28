@@ -42,6 +42,7 @@ install -m 644 "$HERE/packaging/claude-status.desktop" "$STAGE/usr/share/applica
 install -m 644 "$HERE/icons/claude-working.svg" \
 	"$STAGE/usr/share/icons/hicolor/scalable/apps/claude-status.svg"
 install -m 644 "$HERE/README.md" "$STAGE/usr/share/doc/claude-status/"
+install -m 644 "$HERE/packaging/copyright" "$STAGE/usr/share/doc/claude-status/copyright"
 
 # mktemp gives 0700 and cp preserves the checkout's group-write bits; both end
 # up in the archive verbatim, so normalise every mode before packing.

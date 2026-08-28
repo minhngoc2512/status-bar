@@ -320,7 +320,7 @@ claude_status/
 gen_icons.py              sinh 19 icon SVG
 hooks/emit.sh             hook Claude Code
 merge_settings.py         merge hook vào ~/.claude/settings.json
-packaging/                control, systemd unit, .desktop, maintainer scripts
+packaging/                control, systemd unit, .desktop, copyright, maintainer scripts
 build-deb.sh              đóng gói .deb
 ```
 
@@ -330,3 +330,11 @@ build-deb.sh              đóng gói .deb
 python3 test_store.py      # 29 assertion: state machine, i18n, icon
 python3 test_features.py   # 57 assertion: config, thời tiết, crypto, icon
 ```
+
+## Giấy phép
+
+[MIT](LICENSE) © 2026 Minh Ngoc.
+
+Dữ liệu thời tiết từ [Open-Meteo](https://open-meteo.com) (CC BY 4.0), giá crypto từ
+API công khai của [Binance](https://binance-docs.github.io/apidocs/spot/en/). Cả hai đều
+là dịch vụ của bên thứ ba, không kèm trong giấy phép này.
