@@ -138,6 +138,35 @@ systemd user service trỏ vào thư mục hiện tại.
 
 Hook chỉ áp dụng cho **session Claude Code mở mới** sau khi cài.
 
+### Cài lên máy không có Claude Code
+
+Không hỏng gì. Ba chỉ báo thời tiết, crypto và phần cứng chạy bình thường; chỉ báo Claude
+sẽ luôn rỗng. Cài đặt sẽ hiện cảnh báo màu cam nói rõ, và menu của chỉ báo Claude ghi
+*"Máy này không có Claude Code"* thay vì chỉ *"Không có session nào"* — để không ai tưởng
+là hỏng.
+
+`claude-status-hooks` vẫn chạy được và vẫn tạo `~/.claude/settings.json`: hook sẽ hoạt động
+ngay khi Claude Code được cài sau đó. Nó in ra một lưu ý khi phát hiện chưa có Claude Code.
+
+Trường hợp dễ nhầm hơn là **có Claude Code nhưng quên chạy `claude-status-hooks`** — chỉ báo
+cũng rỗng y hệt. Cả Cài đặt lẫn menu đều phân biệt hai trường hợp này và nói đúng lệnh cần chạy.
+
+### Chuyển từ bản `install.sh` sang gói apt
+
+Bản checkout đặt unit ở `~/.config/systemd/user/`, nơi này **che** unit của gói, nên phải gỡ:
+
+```bash
+systemctl --user disable --now claude-status
+rm ~/.config/systemd/user/claude-status.service
+systemctl --user daemon-reload
+```
+
+Rồi xoá các hook entry cũ trỏ vào thư mục checkout trong `~/.claude/settings.json`
+(`claude-status-hooks` chỉ *thêm*, không xoá — để nguyên thì mỗi event ghi hai lần), chạy
+`claude-status-hooks`, và `systemctl --user enable --now claude-status`.
+
+Config `~/.config/claude-status/config.json` giữ nguyên, không mất cài đặt nào.
+
 ---
 
 ## Cài đặt trong app

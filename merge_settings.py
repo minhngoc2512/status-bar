@@ -36,7 +36,20 @@ def entry() -> dict:
     return {"type": "command", "command": HOOK, "timeout": TIMEOUT}
 
 
+def claude_code_present() -> bool:
+    return shutil.which("claude") is not None or SETTINGS.parent.is_dir()
+
+
 def main() -> None:
+    if not claude_code_present():
+        # Not an error: wiring the hooks up in advance is harmless and they will
+        # work the moment Claude Code is installed. Just do not let it look like
+        # the indicator is broken afterwards.
+        print("    LƯU Ý: không tìm thấy Claude Code trên máy này.")
+        print("    Hook vẫn được cài và sẽ hoạt động ngay khi bạn cài Claude Code.")
+        print("    Trong lúc đó, chỉ báo Claude sẽ rỗng — thời tiết, crypto và")
+        print("    theo dõi hệ thống vẫn chạy bình thường.")
+
     settings = {}
     if SETTINGS.exists():
         settings = json.loads(SETTINGS.read_text())

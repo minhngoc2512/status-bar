@@ -10,6 +10,7 @@ from gi.repository import GLib, Gtk
 
 from . import crypto as crypto_mod
 from . import gpu as gpu_mod
+from . import sessions as sessions_mod
 from . import system as sysinfo
 from . import weather as weather_mod
 from .i18n import LANGUAGES
@@ -128,6 +129,10 @@ class Preferences(Gtk.Window):
         holder, box = frame(self.t("prefs.indicators"))
         row, self.sw_claude = switch_row(self.t("prefs.show.claude"))
         box.pack_start(row, False, False, 0)
+        # Same treatment as a machine with no readable GPU: say what is missing
+        # instead of offering a switch that cannot do anything.
+        self.label_claude = dim("")
+        box.pack_start(self.label_claude, False, False, 0)
         row, self.sw_weather = switch_row(self.t("prefs.show.weather"))
         box.pack_start(row, False, False, 0)
         row, self.sw_crypto = switch_row(self.t("prefs.show.crypto"))
@@ -729,6 +734,15 @@ class Preferences(Gtk.Window):
             self.chk_animate.set_active(bool(self.cfg.get("animate", True)))
             self.chk_claude_label.set_active(bool(self.cfg.get("claude.show_label", True)))
             self.sw_claude.set_active(bool(self.cfg.get("claude.enabled", True)))
+            state = sessions_mod.claude_code_status()
+            if state == sessions_mod.OK:
+                self.label_claude.set_markup("")
+            else:
+                key = "prefs.claude.missing" if state == sessions_mod.NOT_FOUND else "prefs.claude.nohooks"
+                self.label_claude.set_markup(
+                    f'<span foreground="#c85a17"><small>'
+                    f"{GLib.markup_escape_text(self.t(key))}</small></span>"
+                )
             for switch in (self.sw_weather, self.sw_weather_on):
                 switch.set_active(bool(self.cfg.get("weather.enabled", False)))
             for switch in (self.sw_crypto, self.sw_crypto_on):

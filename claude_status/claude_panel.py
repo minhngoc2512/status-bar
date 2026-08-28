@@ -15,7 +15,10 @@ from .sessions import (
     EVENTS_DIR,
     IDLE,
     MAX_SPOOL_FILES,
+    NO_HOOKS,
+    NOT_FOUND,
     Store,
+    claude_code_status,
 )
 
 # Animation lives in the tray *label*, not the icon. Measured on GNOME 42 with
@@ -195,7 +198,15 @@ class ClaudePanel(Panel):
         sessions = self.store.ordered()
 
         if not sessions:
-            menu.append(self.info_item(t("menu.empty")))
+            # An empty list means one of three things; say which.
+            state = claude_code_status()
+            if state == NOT_FOUND:
+                menu.append(self.info_item(t("menu.noclaude")))
+            elif state == NO_HOOKS:
+                menu.append(self.info_item(t("menu.nohooks")))
+                menu.append(self.info_item(t("menu.nohooks.fix")))
+            else:
+                menu.append(self.info_item(t("menu.empty")))
         else:
             for sess in sessions:
                 item = Gtk.MenuItem(label=sess.summary(t))

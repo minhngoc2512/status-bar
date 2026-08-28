@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from claude_status import crypto as C  # noqa: E402
 from claude_status import gpu as GPU  # noqa: E402
 from claude_status import labels as L  # noqa: E402
+from claude_status import sessions as SESS  # noqa: E402
 from claude_status import system as SYS  # noqa: E402
 from claude_status import weather as W  # noqa: E402
 from claude_status.config import DEFAULTS, Config, merged  # noqa: E402
@@ -147,6 +148,59 @@ check(
     C.ticker_url("https://api.binance.com/", ["BTCUSDT", "ETHUSDT"]),
     "https://api.binance.com/api/v3/ticker/24hr?symbols=%5B%22BTCUSDT%22%2C%22ETHUSDT%22%5D",
 )
+
+# ------------------------------------------------- Claude Code detection
+# An empty session list means one of three things, and the menu has to say
+# which -- otherwise a machine with no Claude Code just looks broken.
+check("no hooks at all", SESS.hook_installed({}), False)
+check("unrelated hooks only", SESS.hook_installed({"hooks": {"Stop": [{"hooks": [{"command": "other"}]}]}}), False)
+check(
+    "our hook from a checkout",
+    SESS.hook_installed({"hooks": {"Stop": [{"hooks": [{"command": "/home/x/repo/hooks/emit.sh"}]}]}}),
+    True,
+)
+check(
+    "our hook from the package",
+    SESS.hook_installed({"hooks": {"Stop": [{"hooks": [{"command": "/usr/lib/claude-status/hooks/emit.sh"}]}]}}),
+    True,
+)
+check("malformed settings do not raise", SESS.hook_installed({"hooks": {"Stop": None}}), False)
+
+with tempfile.TemporaryDirectory() as tmp:
+    fake = Path(tmp)
+    real_dir, real_settings, real_which = SESS.CLAUDE_DIR, SESS.CLAUDE_SETTINGS, SESS.shutil.which
+    try:
+        SESS.shutil.which = lambda _name: None  # pretend the CLI is absent
+
+        SESS.CLAUDE_DIR = fake / "absent"
+        SESS.CLAUDE_SETTINGS = SESS.CLAUDE_DIR / "settings.json"
+        SESS._probe = (0.0, "")
+        check("no Claude Code at all", SESS.claude_code_status(), SESS.NOT_FOUND)
+
+        SESS.CLAUDE_DIR = fake / "present"
+        SESS.CLAUDE_DIR.mkdir()
+        SESS.CLAUDE_SETTINGS = SESS.CLAUDE_DIR / "settings.json"
+        SESS.CLAUDE_SETTINGS.write_text("{}")
+        SESS._probe = (0.0, "")
+        check("installed but unwired", SESS.claude_code_status(), SESS.NO_HOOKS)
+
+        SESS.CLAUDE_SETTINGS.write_text(
+            json.dumps({"hooks": {"Stop": [{"hooks": [{"command": "/usr/lib/claude-status/hooks/emit.sh"}]}]}})
+        )
+        SESS._probe = (0.0, "")
+        check("installed and wired", SESS.claude_code_status(), SESS.OK)
+
+        SESS.CLAUDE_SETTINGS.write_text("{ not json")
+        SESS._probe = (0.0, "")
+        check("unreadable settings count as unwired", SESS.claude_code_status(), SESS.NO_HOOKS)
+
+        # The menu rebuilds every few seconds; the probe must not stat on each one.
+        SESS.CLAUDE_SETTINGS.unlink()
+        check("the answer is cached", SESS.claude_code_status(), SESS.NO_HOOKS)
+    finally:
+        SESS.CLAUDE_DIR, SESS.CLAUDE_SETTINGS = real_dir, real_settings
+        SESS.shutil.which = real_which
+        SESS._probe = (0.0, "")
 
 # --------------------------------------------------------------------- system
 check("bytes in GiB", SYS.format_bytes(11.1 * 1024**3), "11.1G")

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+import shutil
 import time
 from pathlib import Path
 
@@ -21,6 +23,57 @@ CONFIRM, ERROR, WORKING, BACKGROUND, IDLE = "confirm", "error", "working", "back
 PRIORITY = [CONFIRM, ERROR, WORKING, BACKGROUND, IDLE]
 
 DOT = {CONFIRM: "🟠", ERROR: "🔴", WORKING: "🔵", BACKGROUND: "🟢", IDLE: "⚪"}
+
+
+CLAUDE_DIR = Path.home() / ".claude"
+CLAUDE_SETTINGS = CLAUDE_DIR / "settings.json"
+
+# Nothing here is expensive, but it runs from a menu rebuilt every few seconds,
+# so the answer is cached briefly.
+PROBE_TTL = 30.0
+_probe: tuple[float, str] = (0.0, "")
+
+OK, NO_HOOKS, NOT_FOUND = "ok", "no_hooks", "not_found"
+
+
+def hook_installed(settings: dict) -> bool:
+    """Is any claude-status hook wired into a Claude Code settings dict?
+
+    Matched on the script name rather than a full path: the checkout install and
+    the .deb put emit.sh in different places, and both count.
+    """
+    for groups in (settings.get("hooks") or {}).values():
+        for group in groups or []:
+            for entry in group.get("hooks") or []:
+                if str(entry.get("command", "")).endswith("emit.sh"):
+                    return True
+    return False
+
+
+def claude_code_status(now: float | None = None) -> str:
+    """One of OK / NO_HOOKS / NOT_FOUND.
+
+    The Claude panel is useless without Claude Code, and just as useless when
+    Claude Code is there but nobody ran claude-status-hooks -- in both cases the
+    menu would sit empty with no hint why.
+    """
+    global _probe
+    now = time.time() if now is None else now
+    stamp, cached = _probe
+    if cached and now - stamp < PROBE_TTL:
+        return cached
+
+    if shutil.which("claude") is None and not CLAUDE_DIR.is_dir():
+        state = NOT_FOUND
+    else:
+        try:
+            settings = json.loads(CLAUDE_SETTINGS.read_text())
+        except Exception:
+            settings = {}
+        state = OK if hook_installed(settings) else NO_HOOKS
+
+    _probe = (now, state)
+    return state
 
 
 def human_age(seconds: float) -> str:
