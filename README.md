@@ -261,7 +261,32 @@ Icon hiện trạng thái **xấu nhất** trong tất cả session, theo thứ 
 `confirm > error > working > background > idle`.
 
 Menu: danh sách session (`🟠 sense_nova · chờ confirm: Bash · 12s`), submenu có đường dẫn,
-permission mode, **Mở thư mục**, **Copy đường dẫn**, **Bỏ khỏi danh sách**.
+permission mode, số token, **Mở thư mục**, **Copy đường dẫn**, **Bỏ khỏi danh sách**.
+
+### Đếm token
+
+```
+Token: ra 195K · vào 400
+Cache: ghi 341K · đọc 26.8M
+200 lượt gọi API
+```
+
+**Không hiển thị được hạn mức còn lại.** Đã tra: không có file nào về usage/quota/rate-limit
+trong `~/.claude`, và payload của hook cũng không mang con số nào — kiểm trên `PreToolUse`,
+`PostToolUse`, `PermissionRequest`, `Notification` thật. Claude Code biết hạn mức còn lại từ
+header của response lúc gọi API và không lưu lại. Nên phần này báo **đã tiêu bao nhiêu**,
+không báo được **còn lại bao nhiêu**.
+
+Nguồn số liệu là `message.usage` trong transcript. Mọi payload hook đều mang sẵn
+`transcript_path` nên không phải đoán đường dẫn. Dòng nào không chứa chuỗi `"usage"` thì bị bỏ
+qua mà **không parse**, nên phần lớn nội dung hội thoại không bao giờ được giải mã — đo trên
+transcript 7.6 MB / 2.115 dòng: parse hết mất 39 ms, lọc trước còn 21.8 ms. Sau lượt đầu chỉ
+đọc phần byte mới ghi thêm, tốn **0.02 ms**. Tắt được ở Cài đặt → Chung.
+
+Đọc tăng dần phải chịu được ba tình huống, cả ba đều có test: transcript đang được ghi dở nên
+dòng cuối bị **cắt đôi** giữa hai lần đọc, file bị **thay thế** (session mới trùng tên), và
+file **ngắn lại**. Trường hợp đầu giữ lại phần dở dang chờ ghép; hai trường hợp sau vứt offset
+và đọc lại từ đầu.
 
 ---
 
@@ -530,7 +555,7 @@ build-apt-repo.sh         dựng apt repository phẳng vào ./public
 
 ```bash
 python3 test_store.py      # 29 assertion: state machine, i18n, icon
-python3 test_features.py   # 130 assertion: config, thời tiết, crypto, hệ thống, GPU, nhãn, hook, icon
+python3 test_features.py   # 147 assertion: config, thời tiết, crypto, hệ thống, GPU, nhãn, hook, icon
 ```
 
 ## Phát hành

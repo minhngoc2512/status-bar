@@ -104,6 +104,8 @@ class Session:
         self.permission_mode = ""
         self.subagents = 0
         self.ppid = 0
+        # Handed to us by every hook payload; see claude_status/tokens.py.
+        self.transcript = ""
 
     @property
     def project(self) -> str:
@@ -159,6 +161,8 @@ class Store:
             sess.cwd = ev["cwd"]
         if ev.get("permission_mode"):
             sess.permission_mode = ev["permission_mode"]
+        if ev.get("transcript_path"):
+            sess.transcript = ev["transcript_path"]
 
         if name == "SessionStart":
             sess.subagents = 0

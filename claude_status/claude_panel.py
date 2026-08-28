@@ -10,6 +10,7 @@ import subprocess
 from gi.repository import Gdk, GLib, Gio, Gtk
 
 from .panel import Panel
+from .tokens import TokenMeter, format_count
 from .sessions import (
     CONFIRM,
     EVENTS_DIR,
@@ -43,6 +44,8 @@ class ClaudePanel(Panel):
         super().__init__(app)
         EVENTS_DIR.mkdir(parents=True, exist_ok=True)
         self.store = Store()
+        # One meter per session, keyed by session id.
+        self.meters: dict[str, TokenMeter] = {}
         self.confirming: set[str] = set()
         self.pending_refresh = False
         self.anim_state: str | None = None
@@ -75,9 +78,44 @@ class ClaudePanel(Panel):
             self.refresh()
         return False
 
+    def counting(self) -> bool:
+        return bool(self.cfg.get("claude.show_tokens", True))
+
+    def meter_for(self, sess) -> TokenMeter | None:
+        return self.meters.get(sess.sid) if self.counting() else None
+
+    def update_meters(self) -> None:
+        """Refresh token totals, spending at most one first pass per tick.
+
+        A first pass over a transcript costs about 20 ms; later passes read only
+        the appended bytes and cost microseconds. Doing every new session's
+        first pass in one tick would be a visible stall on a machine with
+        several sessions open, so they are taken one at a time.
+        """
+        if not self.counting():
+            return
+        for sid in list(self.meters):
+            if sid not in self.store.sessions:
+                del self.meters[sid]
+
+        fresh = None
+        for sess in self.store.sessions.values():
+            if not sess.transcript:
+                continue
+            meter = self.meters.get(sess.sid)
+            if meter is None:
+                self.meters[sess.sid] = meter = TokenMeter()
+            if meter.seen:
+                meter.update(sess.transcript)
+            elif fresh is None:
+                fresh = meter, sess.transcript
+        if fresh is not None:
+            fresh[0].update(fresh[1])
+
     def on_tick(self) -> bool:
         self.drain()
         self.store.prune()
+        self.update_meters()
         # Always refresh: the menu shows how long each session has been in state.
         self.refresh()
         return True
@@ -215,6 +253,29 @@ class ClaudePanel(Panel):
                 sub.append(self.info_item(sess.cwd or t("menu.nocwd")))
                 if sess.permission_mode:
                     sub.append(self.info_item(t("menu.permission", mode=sess.permission_mode)))
+
+                meter = self.meter_for(sess)
+                if meter is not None and meter.calls:
+                    sub.append(Gtk.SeparatorMenuItem())
+                    sub.append(
+                        self.info_item(
+                            t(
+                                "menu.tokens.io",
+                                out=format_count(meter.totals["output_tokens"]),
+                                inp=format_count(meter.totals["input_tokens"]),
+                            )
+                        )
+                    )
+                    sub.append(
+                        self.info_item(
+                            t(
+                                "menu.tokens.cache",
+                                write=format_count(meter.totals["cache_creation_input_tokens"]),
+                                read=format_count(meter.totals["cache_read_input_tokens"]),
+                            )
+                        )
+                    )
+                    sub.append(self.info_item(t("menu.tokens.calls", n=meter.calls)))
                 sub.append(Gtk.SeparatorMenuItem())
 
                 sub.append(self.action_item(t("menu.open"), self.on_open_dir, sess.cwd))
@@ -223,6 +284,17 @@ class ClaudePanel(Panel):
 
                 item.set_submenu(sub)
                 menu.append(item)
+
+        if self.counting() and self.meters:
+            out = sum(m.totals["output_tokens"] for m in self.meters.values())
+            cached = sum(m.totals["cache_read_input_tokens"] for m in self.meters.values())
+            if out or cached:
+                menu.append(Gtk.SeparatorMenuItem())
+                menu.append(
+                    self.info_item(
+                        t("menu.tokens", out=format_count(out), cached=format_count(cached))
+                    )
+                )
 
         menu.append(Gtk.SeparatorMenuItem())
 

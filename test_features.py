@@ -11,6 +11,7 @@ from claude_status import crypto as C  # noqa: E402
 from claude_status import gpu as GPU  # noqa: E402
 from claude_status import labels as L  # noqa: E402
 from claude_status import sessions as SESS  # noqa: E402
+from claude_status import tokens as TOK  # noqa: E402
 
 from claude_status import app as APP  # noqa: E402
 
@@ -153,6 +154,53 @@ check(
     C.ticker_url("https://api.binance.com/", ["BTCUSDT", "ETHUSDT"]),
     "https://api.binance.com/api/v3/ticker/24hr?symbols=%5B%22BTCUSDT%22%2C%22ETHUSDT%22%5D",
 )
+
+# ------------------------------------------------------------ token counting
+check("count in thousands", TOK.format_count(1342), "1.3K")
+check("count in millions", TOK.format_count(1172193), "1.2M")
+check("large counts drop the decimal", TOK.format_count(265422863), "265M")
+check("small counts stay plain", TOK.format_count(392), "392")
+check("count of nothing", TOK.format_count(None), "—")
+
+def transcript_line(out, cached=0):
+    return json.dumps({"message": {"usage": {"output_tokens": out, "cache_read_input_tokens": cached}}})
+
+with tempfile.TemporaryDirectory() as tmp:
+    path = Path(tmp) / "session.jsonl"
+    # Lines without usage must be skipped without being parsed at all: that is
+    # both the speed win and the reason most of the conversation is never read.
+    path.write_text(
+        json.dumps({"type": "user", "message": {"content": "hello"}}) + "\n"
+        + transcript_line(100, 1000) + "\n"
+        + transcript_line(50, 500) + "\n"
+    )
+    meter = TOK.TokenMeter()
+    check("first pass reads everything", meter.update(str(path)), True)
+    check("calls counted", meter.calls, 2)
+    check("output summed", meter.output, 150)
+    check("cache reads summed", meter.cached, 1500)
+    check("a second pass adds nothing", meter.update(str(path)), False)
+
+    with open(path, "a") as handle:
+        handle.write(transcript_line(7) + "\n")
+    check("appended lines are picked up", meter.update(str(path)), True)
+    check("totals accumulate", (meter.calls, meter.output), (3, 157))
+
+    # A transcript is appended to while we read it, so the tail can be half a
+    # line. It must be held over, not dropped and not parsed as garbage.
+    with open(path, "a") as handle:
+        handle.write('{"message": {"usage": {"output_')
+    check("a torn line adds nothing yet", meter.update(str(path)), False)
+    with open(path, "a") as handle:
+        handle.write('tokens": 3}}}\n')
+    check("the torn line completes", (meter.update(str(path)), meter.output), (True, 160))
+
+    # A new session reusing the name, or a truncated file, invalidates the offset.
+    path.write_text(transcript_line(1) + "\n")
+    meter.update(str(path))
+    check("a shrunken file is re-read", (meter.calls, meter.output), (1, 1))
+    check("a missing file is survivable", TOK.TokenMeter().update(str(Path(tmp) / "gone")), False)
+    check("an empty path is ignored", TOK.TokenMeter().update(""), False)
 
 # ------------------------------------------------------- upgrade detection
 # apt replaces the files but cannot restart a user service, so the old code
