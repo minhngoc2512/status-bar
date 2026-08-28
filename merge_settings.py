@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 """Merge the status-indicator hooks into ~/.claude/settings.json.
 
-Existing hooks are preserved: entries are appended to each event's list, and
+Other tools' hooks are preserved: entries are appended to each event's list, and
 re-running is a no-op because entries are matched on the command string.
+
+Hooks from a *different* copy of this tool are removed rather than kept. Both
+install routes exist -- the .deb at /usr/lib/claude-status and a git checkout --
+and leaving both wired up makes every Claude Code event write two spool files,
+which is pure waste and makes the settings file look like it has been through a
+fight. Whichever copy runs this script wins.
 """
 
 import json
@@ -40,6 +46,38 @@ def claude_code_present() -> bool:
     return shutil.which("claude") is not None or SETTINGS.parent.is_dir()
 
 
+def is_our_hook(command) -> bool:
+    """Any claude-status hook, wherever it was installed from."""
+    return str(command).endswith("emit.sh")
+
+
+def prune_foreign(settings: dict, keep: str) -> list[str]:
+    """Drop our hooks that point somewhere other than ``keep``.
+
+    Returns the removed command strings so the caller can say what it did.
+    Mutates ``settings`` in place, and takes empty groups and events with it --
+    leaving {"hooks": []} behind would be valid but is just litter.
+    """
+    removed = []
+    hooks = settings.get("hooks") or {}
+    for event in list(hooks):
+        groups = hooks[event] or []
+        for group in groups:
+            entries = group.get("hooks") or []
+            kept = []
+            for entry in entries:
+                command = entry.get("command", "")
+                if is_our_hook(command) and command != keep:
+                    removed.append(command)
+                else:
+                    kept.append(entry)
+            group["hooks"] = kept
+        hooks[event] = [g for g in groups if g.get("hooks")]
+        if not hooks[event]:
+            del hooks[event]
+    return removed
+
+
 def main() -> None:
     if not claude_code_present():
         # Not an error: wiring the hooks up in advance is harmless and they will
@@ -56,6 +94,13 @@ def main() -> None:
         backup = SETTINGS.with_suffix(f".json.bak-{time.strftime('%Y%m%d-%H%M%S')}")
         shutil.copy2(SETTINGS, backup)
         print(f"    backup: {backup}")
+
+    stale = prune_foreign(settings, HOOK)
+    if stale:
+        where = sorted(set(stale))
+        print(f"    gỡ {len(stale)} hook entry của bản cài khác:")
+        for path in where:
+            print(f"      {path}")
 
     hooks = settings.setdefault("hooks", {})
     added = 0

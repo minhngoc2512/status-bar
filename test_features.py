@@ -10,6 +10,8 @@ from claude_status import crypto as C  # noqa: E402
 from claude_status import gpu as GPU  # noqa: E402
 from claude_status import labels as L  # noqa: E402
 from claude_status import sessions as SESS  # noqa: E402
+
+import merge_settings as HOOKS  # noqa: E402
 from claude_status import system as SYS  # noqa: E402
 from claude_status import weather as W  # noqa: E402
 from claude_status.config import DEFAULTS, Config, merged  # noqa: E402
@@ -148,6 +150,33 @@ check(
     C.ticker_url("https://api.binance.com/", ["BTCUSDT", "ETHUSDT"]),
     "https://api.binance.com/api/v3/ticker/24hr?symbols=%5B%22BTCUSDT%22%2C%22ETHUSDT%22%5D",
 )
+
+# ------------------------------------------- hook install / uninstall
+# Both install routes exist (the .deb and a git checkout). Wiring both up makes
+# every Claude Code event spool twice, so whichever installer runs last wins.
+check("our hook, packaged path", HOOKS.is_our_hook("/usr/lib/claude-status/hooks/emit.sh"), True)
+check("our hook, checkout path", HOOKS.is_our_hook("/home/x/repo/hooks/emit.sh"), True)
+check("somebody else's hook", HOOKS.is_our_hook("rtk hook claude"), False)
+check("a non-string command", HOOKS.is_our_hook(None), False)
+
+CFG = {
+    "hooks": {
+        "Stop": [{"hooks": [
+            {"command": "/home/x/checkout/hooks/emit.sh"},
+            {"command": "rtk hook claude"},
+        ]}],
+        "PreToolUse": [{"matcher": "*", "hooks": [{"command": "/old/place/hooks/emit.sh"}]}],
+        "SessionStart": [{"hooks": [{"command": "/usr/lib/claude-status/hooks/emit.sh"}]}],
+    }
+}
+gone = HOOKS.prune_foreign(CFG, "/usr/lib/claude-status/hooks/emit.sh")
+check("both foreign copies removed", sorted(gone), ["/home/x/checkout/hooks/emit.sh", "/old/place/hooks/emit.sh"])
+check("another tool's hook survives", CFG["hooks"]["Stop"][0]["hooks"], [{"command": "rtk hook claude"}])
+check("our own hook survives", "SessionStart" in CFG["hooks"], True)
+check("an emptied event is dropped", "PreToolUse" not in CFG["hooks"], True)
+check("pruning again is a no-op", HOOKS.prune_foreign(CFG, "/usr/lib/claude-status/hooks/emit.sh"), [])
+check("pruning empty settings", HOOKS.prune_foreign({}, "/x/emit.sh"), [])
+check("pruning malformed settings", HOOKS.prune_foreign({"hooks": {"Stop": None}}, "/x/emit.sh"), [])
 
 # ------------------------------------------------- Claude Code detection
 # An empty session list means one of three things, and the menu has to say

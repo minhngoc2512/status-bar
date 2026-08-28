@@ -138,8 +138,13 @@ sudo apt purge status-bar      # kèm hướng dẫn dọn thủ công
 ./install.sh
 ```
 
-Backup `~/.claude/settings.json`, merge hook vào (giữ nguyên hook sẵn có), rồi cài + bật
-systemd user service trỏ vào thư mục hiện tại.
+Backup `~/.claude/settings.json`, merge hook vào (giữ nguyên hook của tool khác), rồi cài +
+bật systemd user service trỏ vào thư mục hiện tại.
+
+**Script sẽ từ chối chạy nếu gói `status-bar` đã cài qua apt.** Chạy chồng lên nhau là cách
+chắc chắn nhất để máy rơi vào trạng thái khó hiểu: unit ghi vào `~/.config/systemd/user/`
+**che** unit của gói nên systemd lặng lẽ chạy mã trong thư mục checkout thay vì mã đã cài,
+và mỗi event của Claude Code bị spool hai lần. Muốn ghi đè thì `./install.sh --force`.
 
 Hook chỉ áp dụng cho **session Claude Code mở mới** sau khi cài.
 
@@ -166,9 +171,10 @@ rm ~/.config/systemd/user/claude-status.service
 systemctl --user daemon-reload
 ```
 
-Rồi xoá các hook entry cũ trỏ vào thư mục checkout trong `~/.claude/settings.json`
-(`claude-status-hooks` chỉ *thêm*, không xoá — để nguyên thì mỗi event ghi hai lần), chạy
-`claude-status-hooks`, và `systemctl --user enable --now claude-status`.
+Rồi chạy `claude-status-hooks` và `systemctl --user enable --now claude-status`.
+Từ 2.2.2, `claude-status-hooks` **tự gỡ** các hook entry trỏ vào bản cài khác trước khi thêm
+của mình, nên chuyển qua lại giữa hai kiểu cài không còn để lại entry trùng. Hook của tool
+khác trong cùng file không bị đụng tới.
 
 Config `~/.config/claude-status/config.json` giữ nguyên, không mất cài đặt nào.
 
@@ -478,7 +484,7 @@ build-apt-repo.sh         dựng apt repository phẳng vào ./public
 
 ```bash
 python3 test_store.py      # 29 assertion: state machine, i18n, icon
-python3 test_features.py   # 97 assertion: config, thời tiết, crypto, hệ thống, GPU, nhãn, icon
+python3 test_features.py   # 118 assertion: config, thời tiết, crypto, hệ thống, GPU, nhãn, hook, icon
 ```
 
 ## Phát hành
