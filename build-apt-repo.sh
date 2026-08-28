@@ -62,15 +62,25 @@ apt-ftparchive \
 # pinentry and dies with "Inappropriate ioctl for device" on a TTY-less runner.
 # Rather than guess which one is present, try the plain form and fall back to
 # loopback with an empty passphrase.
+# Note the fallback passes no --passphrase at all. gpg rejects an empty one --
+# `--passphrase ""` and `--passphrase-file /dev/null` both fail with "No
+# passphrase given", and `--passphrase-fd` on empty input fails with "Bad
+# passphrase". With loopback and no passphrase option, an unprotected key signs.
+# stdin is closed so a key that really does want one fails fast instead of
+# blocking the job.
 sign() {
 	local errors
 	if errors="$(gpg --batch --yes --default-key "$SIGN_KEY" "$@" 2>&1)"; then
 		return 0
 	fi
-	echo "    plain signing failed, retrying with loopback pinentry" >&2
+	echo "    plain signing failed, retrying with loopback pinentry:" >&2
 	printf '    %s\n' "$errors" >&2
-	gpg --batch --yes --pinentry-mode loopback --passphrase "" \
-		--default-key "$SIGN_KEY" "$@"
+	if gpg --batch --yes --pinentry-mode loopback --default-key "$SIGN_KEY" "$@" </dev/null; then
+		return 0
+	fi
+	echo "    both attempts failed; key state:" >&2
+	gpg --list-secret-keys --with-colons | awk -F: '/^sec:/{print "    protection=" $18 " usage=" $12}' >&2
+	return 1
 }
 
 if [[ -n $SIGN_KEY ]]; then
