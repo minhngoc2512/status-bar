@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import errno
 import fcntl
+import os
 import shutil
+import signal
 import subprocess
+import sys
 
 from gi.repository import GLib, Gtk
 
@@ -42,6 +46,8 @@ class FallbackPanel(Panel):
 class App:
     def __init__(self) -> None:
         install_font_metrics()
+        # Clicking the desktop entry while this copy runs lands here.
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, self.on_settings_signal)
         self.cfg = Config()
         self.t = Lang(self.cfg.get("lang") or default_lang())
         self.prefs: Preferences | None = None
@@ -90,6 +96,10 @@ class App:
         return True
 
     # ------------------------------------------------------------------- ui
+
+    def on_settings_signal(self) -> bool:
+        self.open_settings()
+        return GLib.SOURCE_CONTINUE
 
     def open_settings(self) -> None:
         if self.prefs is None:
@@ -141,13 +151,55 @@ def acquire_lock():
     flock is released by the kernel when the process dies, so a killed indicator
     leaves nothing stale behind.
     """
+    handle = None
     try:
         LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
-        handle = open(LOCK_PATH, "w")
+        # O_RDWR|O_CREAT, never "w": open(..., "w") truncates on open, so a
+        # second copy would wipe the pid of the copy it is about to defer to --
+        # before it even discovers the lock is taken.
+        handle = os.fdopen(os.open(LOCK_PATH, os.O_RDWR | os.O_CREAT, 0o644), "r+")
         fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
+        if handle is not None:
+            handle.close()
         return None
+    # The pid is what lets a second launch hand its request to this one instead
+    # of dying quietly; see wake_settings().
+    try:
+        handle.seek(0)
+        handle.truncate()
+        handle.write(f"{os.getpid()}\n")
+        handle.flush()
+    except OSError:
+        pass
     return handle
+
+
+def running_pid() -> int:
+    """Pid of the copy holding the lock, or 0."""
+    try:
+        return int(LOCK_PATH.read_text().strip())
+    except (OSError, ValueError):
+        return 0
+
+
+def wake_settings() -> bool:
+    """Ask the running copy to open its settings window.
+
+    SIGUSR1 rather than D-Bus: the process is already found through the lock
+    file it has to keep open anyway, and a signal needs no name registration,
+    no service file and nothing to keep in sync with the packaging.
+    """
+    pid = running_pid()
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, signal.SIGUSR1)
+    except OSError as exc:
+        # ESRCH means the lock file outlived its writer, which should not happen
+        # while the lock is held, but a stale file must not wedge the launcher.
+        return exc.errno not in (errno.ESRCH, errno.EPERM)
+    return True
 
 
 def report_already_running() -> None:
@@ -160,7 +212,7 @@ def report_already_running() -> None:
     if shutil.which("notify-send"):
         try:
             subprocess.Popen(
-                ["notify-send", "-a", "Claude Status", "Claude Status",
+                ["notify-send", "-a", "Status Bar", "Status Bar",
                  "Đã có một bản đang chạy."],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -169,11 +221,23 @@ def report_already_running() -> None:
             pass
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    argv = sys.argv[1:] if argv is None else argv
+    wants_settings = "--settings" in argv
+
     lock = acquire_lock()
     if lock is None:
-        report_already_running()
+        # A tray app has no window to raise, so the useful thing a second launch
+        # can do is surface the settings of the copy that is already running --
+        # otherwise clicking the desktop entry looks like nothing happened.
+        if wake_settings():
+            print("claude-status is already running; opened its settings.")
+        else:
+            report_already_running()
         return
+
     app = App()
     app.lock = lock  # keep the descriptor alive for the life of the process
+    if wants_settings:
+        GLib.idle_add(app.open_settings)
     Gtk.main()

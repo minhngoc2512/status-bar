@@ -98,7 +98,7 @@ STRINGS = {
         "crypto.remove": "Stop tracking",
         "crypto.updated": "Updated {age} ago",
         # ---------------------------------------------------------- settings
-        "prefs.title": "Claude Status — Settings",
+        "prefs.title": "Status Bar — Settings",
         "prefs.tab.general": "General",
         "prefs.tab.weather": "Weather",
         "prefs.tab.crypto": "Crypto",
@@ -282,7 +282,7 @@ STRINGS = {
         "crypto.remove": "Bỏ theo dõi",
         "crypto.updated": "Cập nhật {age} trước",
         # ---------------------------------------------------------- settings
-        "prefs.title": "Claude Status — Cài đặt",
+        "prefs.title": "Status Bar — Cài đặt",
         "prefs.tab.general": "Chung",
         "prefs.tab.weather": "Thời tiết",
         "prefs.tab.crypto": "Crypto",

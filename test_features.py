@@ -1,5 +1,6 @@
 """Headless checks for the weather/crypto/config logic added on top of test_store.py."""
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -177,11 +178,21 @@ with tempfile.TemporaryDirectory() as tmp:
         APP.LOCK_PATH = Path(tmp) / "indicator.lock"
         first = APP.acquire_lock()
         check("the first copy takes the lock", first is not None, True)
+        check("the lock carries the pid", APP.running_pid(), os.getpid())
         check("a second copy is refused", APP.acquire_lock(), None)
+        # A refused copy must not truncate the file it is about to read: it has
+        # to find the pid there in order to hand its request over.
+        check("a refused copy leaves the pid intact", APP.running_pid(), os.getpid())
         first.close()
         second = APP.acquire_lock()
         check("the lock frees when the holder goes", second is not None, True)
         second.close()
+        # An empty lock file is what older versions left behind; signalling a
+        # pid of 0 would be meaningless, and SIGUSR1 to a version without the
+        # handler would kill it outright.
+        APP.LOCK_PATH.write_text("")
+        check("an empty lock yields no pid", APP.running_pid(), 0)
+        check("and nothing is signalled", APP.wake_settings(), False)
     finally:
         APP.LOCK_PATH = real_lock
 

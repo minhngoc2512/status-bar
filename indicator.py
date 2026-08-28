@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Entry point for the Claude Status tray indicators.
+"""Entry point for the Status Bar tray indicators.
 
 The implementation lives in the ``claude_status`` package; the names re-exported
 here are the ones test_store.py and older scripts import from this module.

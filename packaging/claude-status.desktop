@@ -1,12 +1,21 @@
 [Desktop Entry]
 Type=Application
-Name=Claude Status
+Name=Status Bar
 GenericName=Status indicators
-Comment=Claude Code session, weather and crypto indicators on the top bar
-Comment[vi]=Chỉ báo session Claude Code, thời tiết và crypto trên thanh trạng thái
+Comment=Claude Code session, weather, crypto and hardware indicators on the top bar
+Comment[vi]=Chỉ báo session Claude Code, thời tiết, crypto và phần cứng trên thanh trạng thái
 Exec=/usr/bin/claude-status
 Icon=claude-status
 Terminal=false
 Categories=Utility;GTK;
-Keywords=claude;weather;crypto;binance;indicator;tray;
+Keywords=claude;weather;crypto;binance;cpu;gpu;indicator;tray;
+# A tray app puts up no window at launch, so the shell's startup spinner would
+# only ever time out. Clicking while it already runs opens Settings instead.
+StartupNotify=false
 X-GNOME-UsesNotifications=true
+Actions=settings;
+
+[Desktop Action settings]
+Name=Settings
+Name[vi]=Cài đặt
+Exec=/usr/bin/claude-status --settings

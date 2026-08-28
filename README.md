@@ -120,7 +120,7 @@ Gói cài vào:
 /usr/bin/status-bar              symlink tới launcher
 /usr/bin/claude-status-hooks     merge hook cho user đang gọi
 /usr/lib/systemd/user/claude-status.service
-/usr/share/applications/claude-status.desktop
+/usr/share/applications/claude-status.desktop   mục "Status Bar" trong app menu
 /usr/share/icons/hicolor/scalable/apps/claude-status.svg
 ```
 
@@ -446,6 +446,21 @@ restart chứ không lặp lại hướng dẫn cài lần đầu.
 thêm `sudo` là nó đi tìm session của root, vốn không có D-Bus, và báo
 `Failed to connect to bus: $DBUS_SESSION_BUS_ADDRESS and $XDG_RUNTIME_DIR not defined`.
 
+**Bấm biểu tượng trong app menu mở Settings.** Một tray app không có cửa sổ để đưa lên, nên
+cú bấm thứ hai mà chỉ im lặng thoát thì trông như không làm gì. Bản thứ hai giờ đánh thức bản
+đang chạy mở cửa sổ Cài đặt rồi mới thoát. Nhấp phải vào biểu tượng còn có mục **Cài đặt**
+riêng (`Exec=/usr/bin/claude-status --settings`).
+
+Cơ chế là `SIGUSR1`, không phải D-Bus: tiến trình đã được tìm thấy qua chính file lock nó
+buộc phải giữ, nên không cần đăng ký tên, không cần service file, không có gì phải giữ đồng
+bộ với packaging. Pid được ghi vào file lock **sau** khi `flock` thành công, và file mở bằng
+`O_RDWR|O_CREAT` chứ không phải `"w"` — `open(..., "w")` cắt file ngay lúc mở, nên bản thứ
+hai sẽ xoá mất pid của chính bản nó sắp nhường việc, trước cả khi biết là lock đã có chủ.
+
+Bản cũ (≤ 2.2.5) ghi file lock rỗng, nên `running_pid()` trả 0 và không tín hiệu nào được
+gửi. Điều đó quan trọng: `SIGUSR1` gửi tới bản chưa có handler sẽ **giết** tiến trình, và đó
+đúng là tình huống "đã nâng cấp nhưng chưa restart".
+
 **Chỉ một bản chạy được một lúc.** Rất dễ có hai bản: systemd user service cộng thêm một
 cú bấm vào biểu tượng trong app grid. Hậu quả không chỉ là hai icon — `drain()` xoá từng
 file event sau khi đọc, nên hai bản **chia nhau** spool. Đo với 3 session và 12 event: mỗi
@@ -509,7 +524,7 @@ build-apt-repo.sh         dựng apt repository phẳng vào ./public
 
 ```bash
 python3 test_store.py      # 29 assertion: state machine, i18n, icon
-python3 test_features.py   # 126 assertion: config, thời tiết, crypto, hệ thống, GPU, nhãn, hook, icon
+python3 test_features.py   # 130 assertion: config, thời tiết, crypto, hệ thống, GPU, nhãn, hook, icon
 ```
 
 ## Phát hành
