@@ -10,6 +10,8 @@ import signal
 import subprocess
 import sys
 
+import gi
+
 from gi.repository import GLib, Gtk
 
 from .claude_panel import ClaudePanel
@@ -25,6 +27,34 @@ from .weather import WeatherPanel
 # How often the weather/crypto menus are rebuilt so their "updated N ago" line
 # does not go stale between network refreshes.
 AGE_TICK_SECONDS = 20
+
+
+def present(window) -> None:
+    """Raise a window that was asked for out of band.
+
+    gtk_window_present() with no timestamp trips the compositor's focus-stealing
+    prevention: the window is mapped but left behind whatever currently has
+    focus, so clicking the desktop entry looks like nothing happened. Measured
+    on GNOME 42/X11, _NET_ACTIVE_WINDOW stayed on the previously focused app.
+
+    Handing the window manager the X server's current time is what marks the
+    request as coming from a real user action. There is no equivalent on
+    Wayland, where GTK carries an activation token instead, so that path just
+    presents normally.
+    """
+    window.show_all()
+    surface = window.get_window()
+    if surface is not None:
+        try:
+            gi.require_version("GdkX11", "3.0")
+            from gi.repository import GdkX11
+
+            if isinstance(surface, GdkX11.X11Window):
+                window.present_with_time(GdkX11.x11_get_server_time(surface))
+                return
+        except (ImportError, ValueError):
+            pass
+    window.present()
 
 
 class FallbackPanel(Panel):
@@ -106,8 +136,7 @@ class App:
             self.prefs = Preferences(self)
         else:
             self.prefs.load_values()
-        self.prefs.show_all()
-        self.prefs.present()
+        present(self.prefs)
 
     def set_language(self, code: str) -> None:
         if code == self.t.code:

@@ -451,7 +451,13 @@ cú bấm thứ hai mà chỉ im lặng thoát thì trông như không làm gì.
 đang chạy mở cửa sổ Cài đặt rồi mới thoát. Nhấp phải vào biểu tượng còn có mục **Cài đặt**
 riêng (`Exec=/usr/bin/claude-status --settings`).
 
-Cơ chế là `SIGUSR1`, không phải D-Bus: tiến trình đã được tìm thấy qua chính file lock nó
+Cửa sổ được đưa lên bằng `present_with_time()` với thời gian của X server, không phải
+`present()` trần. `present()` không kèm timestamp bị cơ chế chống "focus stealing" của
+compositor chặn: cửa sổ **có** được tạo nhưng nằm chìm dưới cửa sổ đang focus, nên cú bấm vẫn
+trông như không có gì xảy ra. Đo trên GNOME 42/X11: `_NET_ACTIVE_WINDOW` vẫn giữ nguyên app cũ.
+Wayland không có cơ chế tương đương — GTK dùng activation token — nên nhánh đó `present()` thường.
+
+Cơ chế đánh thức là `SIGUSR1`, không phải D-Bus: tiến trình đã được tìm thấy qua chính file lock nó
 buộc phải giữ, nên không cần đăng ký tên, không cần service file, không có gì phải giữ đồng
 bộ với packaging. Pid được ghi vào file lock **sau** khi `flock` thành công, và file mở bằng
 `O_RDWR|O_CREAT` chứ không phải `"w"` — `open(..., "w")` cắt file ngay lúc mở, nên bản thứ
