@@ -1,35 +1,50 @@
 #!/bin/sh
 set -e
 
+# dpkg passes the previously configured version in $2 on an upgrade, and nothing
+# on a first install. Printing the first-run instructions every time buries the
+# one line that actually matters on an upgrade.
 if [ "$1" = "configure" ]; then
 	# Enable the user unit for every account; it starts at graphical login.
 	systemctl --global enable claude-status.service >/dev/null 2>&1 || true
 
-	cat <<'MSG'
+	if [ -n "$2" ]; then
+		cat <<'UPGRADE'
 
-status-bar installed.
+status-bar nâng cấp xong.
 
-  Nâng cấp? dpkg thay file trên đĩa nhưng KHÔNG khởi động lại được user
-  service (nó chạy bằng root, không với tới session đăng nhập của bạn).
-  Bản đang chạy vẫn là mã cũ cho tới khi bạn chạy:
+  dpkg đã thay file trên đĩa nhưng KHÔNG khởi động lại được user service:
+  nó chạy bằng root, không với tới session đăng nhập của bạn. Bản đang chạy
+  vẫn là mã cũ cho tới khi bạn chạy lệnh sau — KHÔNG dùng sudo:
 
+    systemctl --user daemon-reload
     systemctl --user restart claude-status
 
-  Chỉ báo cũng sẽ tự nhắc việc này trong menu của nó.
+  ('sudo systemctl --user ...' sẽ báo "Failed to connect to bus" vì --user
+   trỏ tới session của root, vốn không có D-Bus.)
 
-  1. Wire the Claude Code hooks into your own settings (run as your user,
-     not with sudo) -- only needed for the Claude session indicator:
+  Menu của chỉ báo cũng tự nhắc khi bản đang chạy cũ hơn bản đã cài.
+
+UPGRADE
+	else
+		cat <<'FRESH'
+
+status-bar đã cài.
+
+  1. Nối hook vào settings của chính bạn — chạy bằng user của bạn,
+     KHÔNG dùng sudo. Chỉ cần cho chỉ báo session Claude Code:
 
        claude-status-hooks
 
-  2. Start it now without logging out:
+  2. Chạy ngay mà không cần đăng xuất:
 
        systemctl --user start claude-status
 
-  Weather and crypto are off by default. Turn them on from the tray icon:
-  Settings -> General.
+  Thời tiết, crypto và theo dõi hệ thống mặc định TẮT. Bật ở biểu tượng
+  trên thanh trạng thái: Cài đặt -> Chung.
 
-MSG
+FRESH
+	fi
 fi
 
 exit 0

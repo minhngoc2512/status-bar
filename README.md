@@ -439,7 +439,12 @@ nên rất dễ tưởng đã nâng cấp xong.
 Indicator tự phát hiện: so `__version__` đang nạp trong bộ nhớ với version đọc từ
 `__init__.py` trên đĩa (kiểm tối đa mỗi 60 giây), lệch thì menu của **mọi** panel hiện
 *"Đã cài bản X nhưng chưa chạy — chạy: systemctl --user restart claude-status"*.
-`postinst` cũng nhắc câu đó khi cài.
+`postinst` cũng nhắc, và phân biệt cài mới với nâng cấp: nâng cấp thì chỉ in đúng lệnh
+restart chứ không lặp lại hướng dẫn cài lần đầu.
+
+**Đừng dùng `sudo` với `systemctl --user`.** `--user` trỏ tới session đăng nhập của *bạn*;
+thêm `sudo` là nó đi tìm session của root, vốn không có D-Bus, và báo
+`Failed to connect to bus: $DBUS_SESSION_BUS_ADDRESS and $XDG_RUNTIME_DIR not defined`.
 
 **Chỉ một bản chạy được một lúc.** Rất dễ có hai bản: systemd user service cộng thêm một
 cú bấm vào biểu tượng trong app grid. Hậu quả không chỉ là hai icon — `drain()` xoá từng
