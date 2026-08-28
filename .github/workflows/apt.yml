@@ -66,6 +66,31 @@ jobs:
             || printf '%s\n' "$PRIVATE_KEY" | gpg --batch --pinentry-mode loopback --passphrase "" --import
           echo "APT_SIGN_KEY=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/{print $10; exit}')" >> "$GITHUB_ENV"
 
+      # TEMPORARY: gpg 2.4 on the runner refuses to sign with a key that signs
+      # fine on 2.2 here. This dumps enough state to tell whether the imported
+      # key is stored protected, and which invocation the runner accepts.
+      - name: Diagnose the imported key
+        continue-on-error: true
+        run: |
+          set +e
+          echo "--- key files ---"
+          for f in ~/.gnupg/private-keys-v1.d/*.key; do
+            echo "$(basename "$f"): $(head -c 30 "$f" | tr -dc '[:print:]')"
+          done
+          echo "--- agent ---"
+          cat ~/.gnupg/gpg-agent.conf 2>/dev/null
+          gpgconf --list-options gpg-agent | grep -i pinentry
+          echo "--- signing variants ---"
+          echo data > /tmp/d
+          gpg --batch --yes --default-key "$APT_SIGN_KEY" --clearsign -o /tmp/a.asc /tmp/d
+          echo "  plain                 rc=$?"
+          gpg --batch --yes --pinentry-mode loopback --default-key "$APT_SIGN_KEY" --clearsign -o /tmp/b.asc /tmp/d </dev/null
+          echo "  loopback              rc=$?"
+          printf '' | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 --default-key "$APT_SIGN_KEY" --clearsign -o /tmp/c.asc /tmp/d
+          echo "  loopback passphrase-fd rc=$?"
+          GPG_TTY= gpg --batch --yes --no-tty --default-key "$APT_SIGN_KEY" --clearsign -o /tmp/e.asc /tmp/d </dev/null
+          echo "  plain no-tty          rc=$?"
+
       - name: Build the repository
         env:
           APT_REPO_URL: https://minhngoc2512.github.io/status-bar
