@@ -25,8 +25,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y dpkg-dev
+      - name: Install build and test dependencies
+        # The GTK and AppIndicator typelibs are needed to *import* the package,
+        # which test_store.py does. No display is required: the tests only build
+        # plain objects, they never realise a widget.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev python3-gi gir1.2-gtk-3.0 \
+            gir1.2-ayatanaappindicator3-0.1
 
       - name: Resolve the tag
         run: echo "TAG=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_ENV"
