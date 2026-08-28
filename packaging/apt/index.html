@@ -32,7 +32,7 @@
 
 <h2>Cài đặt</h2>
 <pre><code>curl -fsSL @BASE_URL@/status-bar-archive-keyring.asc \
-  | sudo gpg --dearmor -o /usr/share/keyrings/status-bar-archive-keyring.gpg
+  | gpg --dearmor | sudo tee /usr/share/keyrings/status-bar-archive-keyring.gpg &gt; /dev/null
 
 echo "deb [signed-by=/usr/share/keyrings/status-bar-archive-keyring.gpg] @BASE_URL@/ ./" \
   | sudo tee /etc/apt/sources.list.d/status-bar.list

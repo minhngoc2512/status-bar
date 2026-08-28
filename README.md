@@ -69,7 +69,7 @@ môi trường không có D-Bus session, hoặc chỉ có GTK 4.
 
 ```bash
 curl -fsSL https://minhngoc2512.github.io/status-bar/status-bar-archive-keyring.asc \
-  | sudo gpg --dearmor -o /usr/share/keyrings/status-bar-archive-keyring.gpg
+  | gpg --dearmor | sudo tee /usr/share/keyrings/status-bar-archive-keyring.gpg > /dev/null
 
 echo "deb [signed-by=/usr/share/keyrings/status-bar-archive-keyring.gpg] https://minhngoc2512.github.io/status-bar/ ./" \
   | sudo tee /etc/apt/sources.list.d/status-bar.list
@@ -79,6 +79,11 @@ sudo apt install status-bar
 ```
 
 `apt upgrade` sẽ tự cập nhật từ đó về sau.
+
+> Đừng dùng `sudo gpg --dearmor -o <file>`. Nếu file đích đã tồn tại, gpg hỏi có ghi đè
+> không, đọc luôn dữ liệu từ pipe làm câu trả lời, rồi để lại **file 0 byte** — sau đó
+> `apt update` im lặng bỏ qua repo và `apt install status-bar` báo không tìm thấy gói.
+> Dạng `gpg --dearmor | sudo tee` ở trên ghi đè sạch và chạy lại bao nhiêu lần cũng được.
 
 > **Tên gói là `status-bar`, nhưng lệnh và cấu hình vẫn là `claude-status`.**
 > Đổi tên chương trình và thư mục `~/.config` sẽ làm mọi bản cài sẵn có mất cấu hình
