@@ -153,6 +153,21 @@ check(
     "https://api.binance.com/api/v3/ticker/24hr?symbols=%5B%22BTCUSDT%22%2C%22ETHUSDT%22%5D",
 )
 
+# ------------------------------------------------------- upgrade detection
+# apt replaces the files but cannot restart a user service, so the old code
+# keeps running until the user is told.
+from claude_status import paths as PATHS  # noqa: E402
+
+check("version parsed off disk", bool(PATHS.VERSION_RE.search('__version__ = "9.9.9"')), True)
+check("no version in the file", PATHS.VERSION_RE.search("nothing here"), None)
+
+PATHS._upgrade_probe = (0.0, "")
+check("running what is installed", PATHS.pending_upgrade(PATHS.installed_version()), "")
+PATHS._upgrade_probe = (0.0, "")
+check("running something older", PATHS.pending_upgrade("0.0.1"), PATHS.installed_version())
+check("the answer is cached", PATHS.pending_upgrade("also-stale"), PATHS.installed_version())
+PATHS._upgrade_probe = (0.0, "")
+
 # --------------------------------------------------------- single instance
 # Two copies do not merely show two icons: drain() unlinks each event file as it
 # reads it, so they split the spool and each ends up with a partial, wrong view.

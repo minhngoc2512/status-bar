@@ -431,6 +431,16 @@ Panel Claude giữ nguyên id `claude-status` cũ để vị trí trên bar khô
 **Không có event "thinking" riêng.** Trạng thái *working* suy ra từ `UserPromptSubmit`
 đến `Stop`. Không tách được extended thinking khỏi lúc đang sinh text.
 
+**`apt upgrade` không khởi động lại được indicator.** dpkg chạy bằng root và không có tay
+nắm nào vào session đăng nhập của bạn, nên nó thay file trên đĩa xong là hết — tiến trình cũ
+vẫn chạy mã cũ cho tới lần đăng nhập sau. Không có gì báo, và `dpkg -l` thì hiện version mới,
+nên rất dễ tưởng đã nâng cấp xong.
+
+Indicator tự phát hiện: so `__version__` đang nạp trong bộ nhớ với version đọc từ
+`__init__.py` trên đĩa (kiểm tối đa mỗi 60 giây), lệch thì menu của **mọi** panel hiện
+*"Đã cài bản X nhưng chưa chạy — chạy: systemctl --user restart claude-status"*.
+`postinst` cũng nhắc câu đó khi cài.
+
 **Chỉ một bản chạy được một lúc.** Rất dễ có hai bản: systemd user service cộng thêm một
 cú bấm vào biểu tượng trong app grid. Hậu quả không chỉ là hai icon — `drain()` xoá từng
 file event sau khi đọc, nên hai bản **chia nhau** spool. Đo với 3 session và 12 event: mỗi
@@ -494,7 +504,7 @@ build-apt-repo.sh         dựng apt repository phẳng vào ./public
 
 ```bash
 python3 test_store.py      # 29 assertion: state machine, i18n, icon
-python3 test_features.py   # 121 assertion: config, thời tiết, crypto, hệ thống, GPU, nhãn, hook, icon
+python3 test_features.py   # 126 assertion: config, thời tiết, crypto, hệ thống, GPU, nhãn, hook, icon
 ```
 
 ## Phát hành

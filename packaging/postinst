@@ -9,6 +9,14 @@ if [ "$1" = "configure" ]; then
 
 status-bar installed.
 
+  Nâng cấp? dpkg thay file trên đĩa nhưng KHÔNG khởi động lại được user
+  service (nó chạy bằng root, không với tới session đăng nhập của bạn).
+  Bản đang chạy vẫn là mã cũ cho tới khi bạn chạy:
+
+    systemctl --user restart claude-status
+
+  Chỉ báo cũng sẽ tự nhắc việc này trong menu của nó.
+
   1. Wire the Claude Code hooks into your own settings (run as your user,
      not with sudo) -- only needed for the Claude session indicator:
 

@@ -20,7 +20,7 @@ except (ValueError, ImportError):  # older systems ship the unprefixed one
 from gi.repository import Gtk, Pango  # noqa: E402
 
 from . import labels
-from .paths import APP_ID, icon_path
+from .paths import APP_ID, icon_path, pending_upgrade
 
 ACTIVE = AppIndicator.IndicatorStatus.ACTIVE
 PASSIVE = AppIndicator.IndicatorStatus.PASSIVE
@@ -108,6 +108,13 @@ class Panel:
 
     def append_tail(self, menu: Gtk.Menu, refresh: bool = False) -> None:
         """Settings / Quit block that every panel ends with."""
+        from . import __version__
+
+        newer = pending_upgrade(__version__)
+        if newer:
+            menu.append(Gtk.SeparatorMenuItem())
+            menu.append(self.info_item(self.t("menu.upgrade", version=newer)))
+            menu.append(self.info_item(self.t("menu.upgrade.fix")))
         menu.append(Gtk.SeparatorMenuItem())
         if refresh:
             menu.append(self.action_item(self.t("menu.refresh"), self.on_refresh_clicked))
