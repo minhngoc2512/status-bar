@@ -76,6 +76,68 @@ def claude_code_status(now: float | None = None) -> str:
     return state
 
 
+# Claude Code only reports plan usage limits for a Claude.ai subscription --
+# "Only present for subscribers", per its own statusLine documentation. Point it
+# at Vertex, Bedrock, a proxy or a bare API key and the numbers never arrive, so
+# the menu has to say why rather than sit blank.
+_backend_probe: tuple[float, tuple[str, str]] = (0.0, ("", ""))
+
+SUBSCRIPTION = "subscription"
+
+
+def api_backend(now: float | None = None) -> tuple[str, str]:
+    """(kind, detail) describing where this machine sends requests."""
+    global _backend_probe
+    now = time.time() if now is None else now
+    stamp, cached = _backend_probe
+    if cached[0] and now - stamp < PROBE_TTL:
+        return cached
+
+    settings_env = {}
+    try:
+        settings_env = json.loads(CLAUDE_SETTINGS.read_text()).get("env") or {}
+    except Exception:  # noqa: BLE001
+        settings_env = {}
+    if not isinstance(settings_env, dict):
+        settings_env = {}
+    # The shell environment wins where both set the same name, which is how
+    # Claude Code resolves it too.
+    env = {**settings_env, **{k: v for k, v in os.environ.items() if k.startswith(("ANTHROPIC_", "CLAUDE_CODE_USE_"))}}
+
+    def on(name: str) -> bool:
+        return str(env.get(name, "")).strip() not in ("", "0", "false", "False")
+
+    if on("CLAUDE_CODE_USE_VERTEX"):
+        found = ("vertex", "Google Vertex AI")
+    elif on("CLAUDE_CODE_USE_BEDROCK"):
+        found = ("bedrock", "Amazon Bedrock")
+    else:
+        url = str(env.get("ANTHROPIC_BASE_URL", "")).strip()
+        if url and "api.anthropic.com" not in url:
+            found = ("proxy", url)
+        elif on("ANTHROPIC_API_KEY") or on("ANTHROPIC_AUTH_TOKEN"):
+            found = ("api_key", "API key")
+        else:
+            found = (SUBSCRIPTION, "")
+    _backend_probe = (now, found)
+    return found
+
+
+def human_until(seconds: float) -> str:
+    """Countdown to a reset: "2h 16m", "45m", "3d 4h", "now"."""
+    seconds = int(seconds)
+    if seconds <= 0:
+        return "now"
+    days, rest = divmod(seconds, 86400)
+    hours, rest = divmod(rest, 3600)
+    minutes = rest // 60
+    if days:
+        return f"{days}d {hours}h"
+    if hours:
+        return f"{hours}h {minutes:02d}m"
+    return f"{minutes}m"
+
+
 def human_age(seconds: float) -> str:
     seconds = int(seconds)
     if seconds < 60:

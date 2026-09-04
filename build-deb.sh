@@ -37,7 +37,7 @@ cp -r "$HERE/icons" "$LIB/"
 cp -r "$HERE/hooks" "$LIB/"
 install -m 644 "$HERE/indicator.py" "$HERE/merge_settings.py" "$HERE/gen_icons.py" "$LIB/"
 find "$LIB" -name '__pycache__' -type d -prune -exec rm -rf {} +
-chmod 755 "$LIB/hooks/emit.sh"
+chmod 755 "$LIB/hooks/emit.sh" "$LIB/hooks/statusline.sh"
 
 install -m 755 "$HERE/packaging/claude-status" "$STAGE/usr/bin/claude-status"
 # Second name so `status-bar` works too, now that the package is called that.
@@ -54,7 +54,7 @@ install -m 644 "$HERE/packaging/copyright" "$STAGE/usr/share/doc/status-bar/copy
 # up in the archive verbatim, so normalise every mode before packing.
 chmod -R u=rwX,go=rX "$STAGE"
 chmod 755 "$STAGE/usr/bin/claude-status" "$STAGE/usr/bin/claude-status-hooks" \
-	"$LIB/hooks/emit.sh"
+	"$LIB/hooks/emit.sh" "$LIB/hooks/statusline.sh"
 
 # --- control ---------------------------------------------------------------
 sed -e "s|@VERSION@|$VERSION|" -e "s|@MAINTAINER@|$MAINTAINER|" \

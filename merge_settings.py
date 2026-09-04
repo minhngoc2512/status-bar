@@ -18,6 +18,7 @@ from pathlib import Path
 
 SETTINGS = Path.home() / ".claude/settings.json"
 HOOK = str(Path(__file__).resolve().parent / "hooks/emit.sh")
+STATUSLINE = str(Path(__file__).resolve().parent / "hooks/statusline.sh")
 
 # event -> matcher (None means "no matcher", i.e. every occurrence)
 EVENTS = {
@@ -123,6 +124,22 @@ def main() -> None:
             groups.append(target)
         target.setdefault("hooks", []).append(entry())
         added += 1
+
+    # statusLine is the only place Claude Code exposes plan usage limits: they
+    # arrive as anthropic-ratelimit-unified-* response headers and are never
+    # written to disk. Its stdout *is* the status line shown inside Claude Code,
+    # so an existing one is never replaced.
+    current = settings.get("statusLine")
+    if isinstance(current, dict) and current.get("command") not in (None, "", STATUSLINE):
+        print("    BỎ QUA statusLine: bạn đã cấu hình sẵn một lệnh khác.")
+        print(f"      hiện tại: {current.get('command')}")
+        print("      Muốn hiện hạn mức gói thì gọi thêm lệnh này trong script của bạn:")
+        print(f"      {STATUSLINE}")
+    elif current and current.get("command") == STATUSLINE:
+        pass
+    else:
+        settings["statusLine"] = {"type": "command", "command": STATUSLINE, "padding": 0}
+        print("    thêm statusLine (hiện hạn mức gói; dòng '5h .. · 7d ..' trong Claude Code)")
 
     SETTINGS.parent.mkdir(parents=True, exist_ok=True)
     SETTINGS.write_text(json.dumps(settings, indent=2) + "\n")

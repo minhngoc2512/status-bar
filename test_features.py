@@ -1,6 +1,7 @@
 """Headless checks for the weather/crypto/config logic added on top of test_store.py."""
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -202,6 +203,45 @@ with tempfile.TemporaryDirectory() as tmp:
     check("a missing file is survivable", TOK.TokenMeter().update(str(Path(tmp) / "gone")), False)
     check("an empty path is ignored", TOK.TokenMeter().update(""), False)
 
+# The cache-hit formula is checked against CodeBurn's own display, which reports
+# 96.6% for 37.9M cached, 1.3M written and 1.5K in.
+check(
+    "cache hit matches a known reading",
+    round(TOK.cache_hit({"cache_read_input_tokens": 37_900_000,
+                         "cache_creation_input_tokens": 1_300_000,
+                         "input_tokens": 1500}), 1),
+    96.7,
+)
+check("cache hit with nothing to divide", TOK.cache_hit(dict.fromkeys(TOK.FIELDS, 0)), None)
+check("cache hit of a cold start", TOK.cache_hit({"input_tokens": 100}), 0.0)
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    (root / "projA").mkdir()
+    (root / "projB").mkdir()
+    (root / "projA" / "s1.jsonl").write_text(transcript_line(10, 90) + "\n")
+    (root / "projB" / "s2.jsonl").write_text(transcript_line(20, 80) + "\n")
+    (root / "projB" / "notes.txt").write_text("ignored")
+    daily = TOK.DailyUsage(hours=24)
+    daily.scan(str(root))
+    check("both transcripts counted", daily.snapshot["sessions"], 2)
+    check("calls summed across projects", daily.snapshot["calls"], 2)
+    check("tokens summed across projects", daily.snapshot["totals"]["output_tokens"], 30)
+    check("non-transcripts ignored", daily.snapshot["totals"]["cache_read_input_tokens"], 170)
+
+    (root / "projA" / "s1.jsonl").write_text(transcript_line(10, 90) + "\n" + transcript_line(5) + "\n")
+    daily.scan(str(root))
+    check("a rescan picks up appended lines", daily.snapshot["calls"], 3)
+
+    # Files that age out of the window must stop counting, or the totals stop
+    # describing the window and become a running total of everything ever seen.
+    old = root / "projB" / "s2.jsonl"
+    os.utime(old, (0, 0))
+    daily.scan(str(root))
+    check("a transcript outside the window drops out", daily.snapshot["sessions"], 1)
+    check("and its tokens go with it", daily.snapshot["totals"]["output_tokens"], 15)
+    check("a missing root is survivable", TOK.DailyUsage().transcripts(str(root / "gone")), [])
+
 # ------------------------------------------------------- upgrade detection
 # apt replaces the files but cannot restart a user service, so the old code
 # keeps running until the user is told.
@@ -270,6 +310,86 @@ check("an emptied event is dropped", "PreToolUse" not in CFG["hooks"], True)
 check("pruning again is a no-op", HOOKS.prune_foreign(CFG, "/usr/lib/claude-status/hooks/emit.sh"), [])
 check("pruning empty settings", HOOKS.prune_foreign({}, "/x/emit.sh"), [])
 check("pruning malformed settings", HOOKS.prune_foreign({"hooks": {"Stop": None}}, "/x/emit.sh"), [])
+
+# --------------------------------------------------------- plan usage limits
+# Plan limits reach us only through the statusLine payload: they arrive as
+# anthropic-ratelimit-unified-* response headers and are never written to disk.
+check("countdown in minutes", SESS.human_until(60), "1m")
+check("countdown in hours", SESS.human_until(8160), "2h 16m")
+check("countdown in days", SESS.human_until(86400 * 3 + 4 * 3600), "3d 4h")
+check("a window already past", SESS.human_until(-5), "now")
+
+# Limits only exist for a Claude.ai subscription. Point Claude Code at Vertex,
+# Bedrock, a proxy or a bare API key and they never arrive, so the menu says why.
+def backend(settings_env, shell_env):
+    with tempfile.TemporaryDirectory() as box:
+        path = Path(box) / "settings.json"
+        path.write_text(json.dumps({"env": settings_env}))
+        keep_settings, keep_env = SESS.CLAUDE_SETTINGS, dict(os.environ)
+        try:
+            SESS.CLAUDE_SETTINGS = path
+            for name in list(os.environ):
+                if name.startswith(("ANTHROPIC_", "CLAUDE_CODE_USE_")):
+                    del os.environ[name]
+            os.environ.update(shell_env)
+            SESS._backend_probe = (0.0, ("", ""))
+            return SESS.api_backend()
+        finally:
+            SESS.CLAUDE_SETTINGS = keep_settings
+            os.environ.clear()
+            os.environ.update(keep_env)
+            SESS._backend_probe = (0.0, ("", ""))
+
+
+check("a plain subscription", backend({}, {})[0], SESS.SUBSCRIPTION)
+check("vertex from settings", backend({"CLAUDE_CODE_USE_VERTEX": "2"}, {}), ("vertex", "Google Vertex AI"))
+check("bedrock from the shell", backend({}, {"CLAUDE_CODE_USE_BEDROCK": "1"})[0], "bedrock")
+check("a proxy base url", backend({}, {"ANTHROPIC_BASE_URL": "https://9router.example/v1"}),
+      ("proxy", "https://9router.example/v1"))
+check("anthropic's own base url is not a proxy",
+      backend({}, {"ANTHROPIC_BASE_URL": "https://api.anthropic.com"})[0], SESS.SUBSCRIPTION)
+check("a bare api key", backend({}, {"ANTHROPIC_API_KEY": "sk-x"})[0], "api_key")
+check("a flag switched off counts as off", backend({"CLAUDE_CODE_USE_VERTEX": "0"}, {})[0], SESS.SUBSCRIPTION)
+check("an empty base url is ignored", backend({"ANTHROPIC_BASE_URL": ""}, {})[0], SESS.SUBSCRIPTION)
+
+SCRIPT = str(Path(__file__).resolve().parent / "hooks/statusline.sh")
+
+
+def statusline(payload: str, spool: str) -> str:
+    done = subprocess.run(
+        ["bash", SCRIPT], input=payload, capture_output=True, text=True,
+        env={**os.environ, "CLAUDE_STATUS_DIR": spool},
+    )
+    return done.stdout
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    both = '{"rate_limits":{"five_hour":{"used_percentage":47.3,"resets_at":1},"seven_day":{"used_percentage":30.0,"resets_at":2}}}'
+    check("both windows render", statusline(both, tmp), "5h 47% · 7d 30%")
+    check(
+        "an integer percentage",
+        statusline('{"rate_limits":{"five_hour":{"used_percentage":8,"resets_at":1}}}', tmp),
+        "5h 8%",
+    )
+    # resets_at before used_percentage: the payload is JSON, so key order is not
+    # guaranteed, and a naive scan would swallow the wrong number.
+    check(
+        "reversed key order",
+        statusline('{"rate_limits":{"five_hour":{"resets_at":1,"used_percentage":12.5}}}', tmp),
+        "5h 12%",
+    )
+    check("no limits yet", statusline('{"session_id":"x"}', tmp), "")
+    check("empty limits", statusline('{"rate_limits":{}}', tmp), "")
+    check("torn payload", statusline('{"rate_limits":{"five_hour":', tmp), "")
+    check("zero is still shown", statusline('{"rate_limits":{"five_hour":{"used_percentage":0}}}', tmp), "5h 0%")
+
+    spooled = sorted(Path(tmp).glob("events/*.status.json"))
+    check("payloads are spooled for the tray", len(spooled) > 0, True)
+    check(
+        "and spooled verbatim",
+        json.loads(spooled[0].read_text())["rate_limits"]["five_hour"]["used_percentage"],
+        47.3,
+    )
 
 # ------------------------------------------------- Claude Code detection
 # An empty session list means one of three things, and the menu has to say

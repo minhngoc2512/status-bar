@@ -6,12 +6,14 @@ import json
 import os
 import shutil
 import subprocess
+import threading
+import time
 
 from gi.repository import Gdk, GLib, Gio, Gtk
 
 from .panel import Panel
-from .tokens import TokenMeter, format_count
-from .sessions import (
+from .tokens import DailyUsage, TokenMeter, cache_hit, format_count
+from .sessions import (  # noqa: I001
     CONFIRM,
     EVENTS_DIR,
     IDLE,
@@ -19,7 +21,10 @@ from .sessions import (
     NO_HOOKS,
     NOT_FOUND,
     Store,
+    SUBSCRIPTION,
+    api_backend,
     claude_code_status,
+    human_until,
 )
 
 # Animation lives in the tray *label*, not the icon. Measured on GNOME 42 with
@@ -46,6 +51,16 @@ class ClaudePanel(Panel):
         self.store = Store()
         # One meter per session, keyed by session id.
         self.meters: dict[str, TokenMeter] = {}
+        # Usage across every transcript touched recently, not just live
+        # sessions. The first pass is ~400 ms, so it runs off the main loop.
+        self.daily = DailyUsage(hours=24)
+        self.daily_busy = False
+        # Plan usage limits, from the statusLine payload. Account-wide rather
+        # than per-session, so one value for the whole panel.
+        self.limits: dict = {}
+        # Distinguishes "no statusLine wired" from "wired, but this backend
+        # never reports limits".
+        self.statusline_seen = False
         self.confirming: set[str] = set()
         self.pending_refresh = False
         self.anim_state: str | None = None
@@ -63,6 +78,9 @@ class ClaudePanel(Panel):
 
         # Safety net: catches missed inotify events and re-renders the age column.
         self.tick_timer = GLib.timeout_add_seconds(3, self.on_tick)
+        # Let the panel appear first, then take the expensive first pass.
+        GLib.timeout_add_seconds(6, self.start_daily_scan)
+        self.daily_timer = GLib.timeout_add_seconds(300, self.start_daily_scan)
 
     # ---------------------------------------------------------------- events
 
@@ -112,6 +130,25 @@ class ClaudePanel(Panel):
         if fresh is not None:
             fresh[0].update(fresh[1])
 
+    def start_daily_scan(self) -> bool:
+        if self.daily_busy or not self.counting():
+            return GLib.SOURCE_CONTINUE
+        self.daily_busy = True
+
+        def work() -> None:
+            try:
+                self.daily.scan()
+            finally:
+                GLib.idle_add(self.finish_daily_scan)
+
+        threading.Thread(target=work, daemon=True).start()
+        return GLib.SOURCE_CONTINUE
+
+    def finish_daily_scan(self) -> bool:
+        self.daily_busy = False
+        self.refresh()
+        return GLib.SOURCE_REMOVE
+
     def on_tick(self) -> bool:
         self.drain()
         self.store.prune()
@@ -133,6 +170,12 @@ class ClaudePanel(Panel):
 
         touched = False
         for path in files:
+            # statusLine payloads share the spool but are not hook events; they
+            # would otherwise be parsed, ignored and deleted, losing the only
+            # copy of the plan limits.
+            if path.name.endswith(".status.json"):
+                self.apply_status(path)
+                continue
             ppid = 0
             parts = path.name.split(".")
             if len(parts) >= 2 and parts[1].isdigit():
@@ -148,6 +191,19 @@ class ClaudePanel(Panel):
         if touched:
             self.notify_new_confirms()
         return touched
+
+    def apply_status(self, path) -> None:
+        try:
+            payload = json.loads(path.read_text())
+        except Exception:  # noqa: BLE001 - a torn write is not worth a traceback
+            payload = None
+        path.unlink(missing_ok=True)
+        if not isinstance(payload, dict):
+            return
+        self.statusline_seen = True
+        limits = payload.get("rate_limits")
+        if isinstance(limits, dict) and limits:
+            self.limits = {"windows": limits, "at": time.time()}
 
     def notify_new_confirms(self) -> None:
         now = {s.sid for s in self.store.sessions.values() if s.state == CONFIRM}
@@ -285,14 +341,54 @@ class ClaudePanel(Panel):
                 item.set_submenu(sub)
                 menu.append(item)
 
-        if self.counting() and self.meters:
-            out = sum(m.totals["output_tokens"] for m in self.meters.values())
-            cached = sum(m.totals["cache_read_input_tokens"] for m in self.meters.values())
-            if out or cached:
+        windows = (self.limits.get("windows") or {}) if self.limits else {}
+        rows = [
+            (key, windows.get(key))
+            for key in ("five_hour", "seven_day")
+            if isinstance(windows.get(key), dict)
+        ]
+        if not rows:
+            kind, detail = api_backend()
+            if kind != SUBSCRIPTION:
+                menu.append(Gtk.SeparatorMenuItem())
+                menu.append(self.info_item(t("menu.plan.unavailable")))
+                menu.append(self.info_item("    " + t("menu.plan.backend", detail=detail)))
+            elif not self.statusline_seen:
+                menu.append(Gtk.SeparatorMenuItem())
+                menu.append(self.info_item(t("menu.plan.unavailable")))
+                menu.append(self.info_item("    " + t("menu.plan.nostatusline")))
+        if rows:
+            menu.append(Gtk.SeparatorMenuItem())
+            menu.append(self.info_item(t("menu.plan")))
+            for key, window in rows:
+                used = window.get("used_percentage")
+                resets = window.get("resets_at")
+                label = t(
+                    f"menu.plan.{key}",
+                    pct=f"{float(used):.0f}" if isinstance(used, (int, float)) else "—",
+                )
+                if isinstance(resets, (int, float)):
+                    label += "   " + t("menu.plan.resets", v=human_until(resets - time.time()))
+                menu.append(self.info_item("    " + label))
+
+        if self.counting():
+            snap = self.daily.snapshot
+            if snap["calls"]:
+                hit = cache_hit(snap["totals"])
                 menu.append(Gtk.SeparatorMenuItem())
                 menu.append(
                     self.info_item(
-                        t("menu.tokens", out=format_count(out), cached=format_count(cached))
+                        t("menu.daily", calls=format_count(snap["calls"]), sessions=snap["sessions"])
+                    )
+                )
+                menu.append(
+                    self.info_item(
+                        t(
+                            "menu.daily.tokens",
+                            out=format_count(snap["totals"]["output_tokens"]),
+                            cached=format_count(snap["totals"]["cache_read_input_tokens"]),
+                            hit=f"{hit:.1f}" if hit is not None else "—",
+                        )
                     )
                 )
 
@@ -343,6 +439,9 @@ class ClaudePanel(Panel):
 
     def shutdown(self) -> None:
         self.stop_anim()
+        if self.daily_timer is not None:
+            GLib.source_remove(self.daily_timer)
+            self.daily_timer = None
         if self.tick_timer is not None:
             GLib.source_remove(self.tick_timer)
             self.tick_timer = None

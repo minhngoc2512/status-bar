@@ -263,6 +263,46 @@ Icon hiện trạng thái **xấu nhất** trong tất cả session, theo thứ 
 Menu: danh sách session (`🟠 sense_nova · chờ confirm: Bash · 12s`), submenu có đường dẫn,
 permission mode, số token, **Mở thư mục**, **Copy đường dẫn**, **Bỏ khỏi danh sách**.
 
+### Hạn mức gói (plan usage limits)
+
+```
+Hạn mức gói
+    5 giờ   47%   reset sau 2h 16m
+    Tuần    30%   reset sau 3d 4h
+```
+
+Con số này **không nằm ở đâu trên đĩa**. Nó tới dưới dạng header
+`anthropic-ratelimit-unified-*` trên mỗi response và không được lưu lại — tra bằng ba cách
+(tìm theo tên file, grep nội dung `~/.claude` và `~/.claude.json`, và bắt payload hook thật)
+đều không ra. Chỗ duy nhất Claude Code phơi ra là **statusLine**: nó đổ một object JSON vào
+stdin của lệnh statusLine, theo đúng schema ghi trong tài liệu nhúng của binary:
+
+```json
+"rate_limits": {   // Optional: chỉ có với subscriber, sau response API đầu tiên
+  "five_hour": { "used_percentage": number, "resets_at": number },
+  "seven_day": { "used_percentage": number, "resets_at": number }
+}
+```
+
+`hooks/statusline.sh` đổ payload đó vào cùng spool với hook. Nó chạy mỗi lần status line
+render — thường xuyên hơn hook nhiều — nên **không sinh tiến trình con nào**: không `jq`,
+không `python`, chỉ dùng parameter expansion của bash.
+
+**stdout của statusLine chính là dòng status trong Claude Code.** Nên script in ra đúng tóm
+tắt `5h 47% · 7d 30%`, và không in gì khi payload không có hạn mức. `claude-status-hooks`
+**không bao giờ ghi đè** statusLine sẵn có — nếu bạn đã cấu hình lệnh riêng, nó in ra đường
+dẫn để bạn tự gọi lồng vào.
+
+**Không phải cấu hình nào cũng có số này.** Claude Code chỉ báo hạn mức cho gói Claude.ai.
+Trỏ nó sang Vertex, Bedrock, một proxy như 9router, hay dùng API key trần thì con số không
+bao giờ tới. Indicator đọc khối `env` trong `~/.claude/settings.json` cộng biến môi trường để
+nhận ra, và nói thẳng lý do thay vì để trống:
+
+```
+Không lấy được hạn mức gói
+    request đi qua Google Vertex AI, nơi không báo hạn mức
+```
+
 ### Đếm token
 
 ```
@@ -543,6 +583,7 @@ claude_status/
   paths.py                định vị icon (checkout hay /usr/lib đều đúng)
 gen_icons.py              sinh 22 icon SVG
 hooks/emit.sh             hook Claude Code
+hooks/statusline.sh       statusLine: nguồn duy nhất của hạn mức gói
 merge_settings.py         merge hook vào ~/.claude/settings.json
 packaging/                control, systemd unit, .desktop, copyright, maintainer scripts
 packaging/apt/            trang chủ apt repo + script tạo khoá ký
@@ -555,7 +596,7 @@ build-apt-repo.sh         dựng apt repository phẳng vào ./public
 
 ```bash
 python3 test_store.py      # 29 assertion: state machine, i18n, icon
-python3 test_features.py   # 147 assertion: config, thời tiết, crypto, hệ thống, GPU, nhãn, hook, icon
+python3 test_features.py   # 179 assertion: config, thời tiết, crypto, hệ thống, GPU, nhãn, hook, icon
 ```
 
 ## Phát hành
