@@ -352,6 +352,14 @@ check("a bare api key", backend({}, {"ANTHROPIC_API_KEY": "sk-x"})[0], "api_key"
 check("a flag switched off counts as off", backend({"CLAUDE_CODE_USE_VERTEX": "0"}, {})[0], SESS.SUBSCRIPTION)
 check("an empty base url is ignored", backend({"ANTHROPIC_BASE_URL": ""}, {})[0], SESS.SUBSCRIPTION)
 
+# The bar and the menu both show what is *left*, not what is used: two readings
+# that add up to 100 in different places is a trap.
+check("half a window left", TOK.remaining(47.3), 52.7)
+check("a fresh window", TOK.remaining(0), 100.0)
+check("an exhausted window", TOK.remaining(100), 0.0)
+check("a window reported past its limit", TOK.remaining(101), 0.0)
+check("a missing figure", TOK.remaining(None), 0.0)
+
 SCRIPT = str(Path(__file__).resolve().parent / "hooks/statusline.sh")
 
 

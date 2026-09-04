@@ -169,6 +169,10 @@ class Preferences(Gtk.Window):
         )
         box.pack_start(self.chk_claude_label, False, False, 0)
 
+        self.chk_limit = Gtk.CheckButton(label=self.t("prefs.showlimit"))
+        self.chk_limit.connect("toggled", lambda w: self.write("claude.show_limit", w.get_active()))
+        box.pack_start(self.chk_limit, False, False, 0)
+
         self.chk_tokens = Gtk.CheckButton(label=self.t("prefs.showtokens"))
         self.chk_tokens.connect("toggled", lambda w: self.write("claude.show_tokens", w.get_active()))
         box.pack_start(self.chk_tokens, False, False, 0)
@@ -738,6 +742,7 @@ class Preferences(Gtk.Window):
             self.chk_notify.set_active(bool(self.cfg.get("notify", True)))
             self.chk_animate.set_active(bool(self.cfg.get("animate", True)))
             self.chk_claude_label.set_active(bool(self.cfg.get("claude.show_label", True)))
+            self.chk_limit.set_active(bool(self.cfg.get("claude.show_limit", True)))
             self.chk_tokens.set_active(bool(self.cfg.get("claude.show_tokens", True)))
             self.sw_claude.set_active(bool(self.cfg.get("claude.enabled", True)))
             state = sessions_mod.claude_code_status()

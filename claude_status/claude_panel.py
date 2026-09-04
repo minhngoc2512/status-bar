@@ -11,6 +11,7 @@ import time
 
 from gi.repository import Gdk, GLib, Gio, Gtk
 
+from . import labels
 from .panel import Panel
 from .tokens import DailyUsage, TokenMeter, cache_hit, format_count
 from .sessions import (  # noqa: I001
@@ -26,6 +27,7 @@ from .sessions import (  # noqa: I001
     claude_code_status,
     human_until,
 )
+from .tokens import remaining
 
 # Animation lives in the tray *label*, not the icon. Measured on GNOME 42 with
 # ubuntu-appindicators: swapping the icon file repaints at ~1 fps no matter how
@@ -192,6 +194,36 @@ class ClaudePanel(Panel):
             self.notify_new_confirms()
         return touched
 
+    @staticmethod
+    def remaining(used) -> float:
+        return remaining(used)
+
+    def live_window(self, key: str) -> dict | None:
+        """A reported window, or None once it is past its own reset time.
+
+        statusLine stops firing when no Claude Code session is running, so the
+        last value can outlive the window it describes. Showing a stale
+        percentage on the bar would be worse than showing nothing.
+        """
+        window = ((self.limits.get("windows") or {}).get(key)) if self.limits else None
+        if not isinstance(window, dict):
+            return None
+        resets = window.get("resets_at")
+        if isinstance(resets, (int, float)) and time.time() >= resets:
+            return None
+        return window
+
+    def limit_label(self) -> str:
+        if not self.cfg.get("claude.show_limit", True):
+            return ""
+        window = self.live_window("five_hour")
+        used = (window or {}).get("used_percentage")
+        if not isinstance(used, (int, float)):
+            return ""
+        # Padded for the same reason as the system panel: 7% -> 47% -> 100%
+        # would otherwise shove every indicator to the left.
+        return labels.percent(remaining(used))
+
     def apply_status(self, path) -> None:
         try:
             payload = json.loads(path.read_text())
@@ -278,9 +310,12 @@ class ClaudePanel(Panel):
             n = self.store.count(state)
             if n > 1:
                 label = f"{label} {n}"
+        limit = self.limit_label()
+        if limit:
+            label = f"{label}  {limit}" if label else limit
         self.base_label = label
 
-        self.sync_anim(state if label else IDLE)
+        self.sync_anim(state if self.t(f"bar.{state}") and self.cfg.get("claude.show_label", True) else IDLE)
         self.apply_label()
 
         self.ind.set_title(self.t("title", n=len(self.store.sessions)))
@@ -363,9 +398,11 @@ class ClaudePanel(Panel):
             for key, window in rows:
                 used = window.get("used_percentage")
                 resets = window.get("resets_at")
+                # Remaining, not used: the bar shows the same number, and two
+                # readings that add up to 100 in different places is a trap.
                 label = t(
                     f"menu.plan.{key}",
-                    pct=f"{float(used):.0f}" if isinstance(used, (int, float)) else "—",
+                    pct=f"{remaining(used):.0f}" if isinstance(used, (int, float)) else "—",
                 )
                 if isinstance(resets, (int, float)):
                     label += "   " + t("menu.plan.resets", v=human_until(resets - time.time()))

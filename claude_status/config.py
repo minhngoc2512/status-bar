@@ -29,6 +29,8 @@ DEFAULTS: dict = {
         "show_label": True,
         # Reads message.usage out of each session's transcript; see tokens.py.
         "show_tokens": True,
+        # Puts the 5-hour plan limit next to the icon, when one is reported.
+        "show_limit": True,
     },
     "weather": {
         "enabled": False,

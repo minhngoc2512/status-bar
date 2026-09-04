@@ -266,10 +266,21 @@ permission mode, số token, **Mở thư mục**, **Copy đường dẫn**, **B�
 ### Hạn mức gói (plan usage limits)
 
 ```
+◐ working  53%          ← còn lại của cửa sổ 5 giờ, ngay trên thanh trạng thái
+
 Hạn mức gói
-    5 giờ   47%   reset sau 2h 16m
-    Tuần    30%   reset sau 3d 4h
+    5 giờ   còn 53%   reset sau 2h 16m
+    Tuần    còn 70%   reset sau 3d 4h
 ```
+
+Claude Code báo phần **đã dùng**; ở đây hiện phần **còn lại**, và cả bar lẫn menu dùng chung
+một con số — hai chỗ hiện hai số cộng lại bằng 100 là cái bẫy dễ đọc nhầm. Con số trên bar
+được đệm bề rộng cố định như mọi nhãn khác (`0%`, `53%`, `100%` đều rộng 37 px), nếu không
+thì mỗi lần đổi chữ số nó lại đẩy các icon bên trái. Tắt được ở **Cài đặt → Chung**.
+
+statusLine ngừng chạy khi không có session Claude Code nào mở, nên giá trị cuối cùng có thể
+sống lâu hơn chính cửa sổ nó mô tả. Khi `resets_at` đã qua, con số bị bỏ khỏi bar thay vì hiện
+một tỉ lệ đã cũ.
 
 Con số này **không nằm ở đâu trên đĩa**. Nó tới dưới dạng header
 `anthropic-ratelimit-unified-*` trên mỗi response và không được lưu lại — tra bằng ba cách
@@ -596,7 +607,7 @@ build-apt-repo.sh         dựng apt repository phẳng vào ./public
 
 ```bash
 python3 test_store.py      # 29 assertion: state machine, i18n, icon
-python3 test_features.py   # 179 assertion: config, thời tiết, crypto, hệ thống, GPU, nhãn, hook, icon
+python3 test_features.py   # 184 assertion: config, thời tiết, crypto, hệ thống, GPU, nhãn, hook, icon
 ```
 
 ## Phát hành

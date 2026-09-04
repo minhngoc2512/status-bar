@@ -43,6 +43,19 @@ def format_count(value) -> str:
     return f"{number:.0f}"
 
 
+def remaining(used_percentage) -> float:
+    """Share of a plan window still available.
+
+    Claude Code reports how much has been *used*; the indicator shows what is
+    left, so the bar and the menu never disagree by being two sides of the same
+    number. Clamped: a window can report slightly over 100.
+    """
+    try:
+        return max(0.0, min(100.0, 100.0 - float(used_percentage)))
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def cache_hit(totals: dict) -> float | None:
     """Share of prompt tokens served from cache, as a percentage.
 
