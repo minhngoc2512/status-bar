@@ -278,9 +278,50 @@ một con số — hai chỗ hiện hai số cộng lại bằng 100 là cái b�
 được đệm bề rộng cố định như mọi nhãn khác (`0%`, `53%`, `100%` đều rộng 37 px), nếu không
 thì mỗi lần đổi chữ số nó lại đẩy các icon bên trái. Tắt được ở **Cài đặt → Chung**.
 
-statusLine ngừng chạy khi không có session Claude Code nào mở, nên giá trị cuối cùng có thể
-sống lâu hơn chính cửa sổ nó mô tả. Khi `resets_at` đã qua, con số bị bỏ khỏi bar thay vì hiện
-một tỉ lệ đã cũ.
+#### Phải có một phiên `claude` chạy trong terminal
+
+statusLine **chỉ được gọi bởi phiên TUI trong terminal**, và chỉ sau khi phiên đó đã gọi API
+ít nhất một lần. Đây là điều kiện dễ bỏ sót nhất: máy đang mở Claude Code mà bar vẫn trống là
+chuyện bình thường, nếu đó không phải phiên TUI.
+
+| Cách chạy Claude Code | Có gọi statusLine? |
+| :--- | :--- |
+| `claude` trong terminal (TUI), đã chat ít nhất 1 lần | ✅ |
+| `claude` trong terminal nhưng chưa gửi tin nào | ⚠️ có payload, nhưng chưa có `rate_limits` |
+| App desktop (`--output-format stream-json`) | ❌ |
+| `claude -p "..."` (print mode) | ❌ |
+
+Không cần phiên đó mở trong đúng repo này. `statusLine` nằm ở `~/.claude/settings.json` nên
+bất kỳ phiên `claude` TUI nào trên máy cũng bơm dữ liệu về.
+
+Kiểm tra nhanh khi không thấy số:
+
+```bash
+pgrep -ax claude | grep -v output-format
+```
+
+Có dòng `<pid> claude` trần là đúng loại phiên. Không ra gì nghĩa là chưa có phiên TUI nào.
+
+`-x` (khớp đúng tên tiến trình) là phần quan trọng: `pgrep -f claude` bắt luôn cả tiến trình
+con của app desktop, `chrome-native-host`, MCP server… lệnh trả về hai chục dòng nhiễu và phiên
+TUI thật lại lọt thỏm ở giữa. Còn `grep -v output-format` loại nốt các phiên
+`--output-format stream-json` của app desktop — thứ không bao giờ sinh ra hạn mức.
+
+#### Con số sống được bao lâu
+
+Đóng terminal không làm số biến mất ngay — nhưng nó **đứng yên**, vì không còn payload nào
+tới nữa. Dùng tiếp bằng app desktop thì hạn mức thật tụt xuống trong khi bar vẫn giữ số cũ.
+
+| Tình huống | Trên bar |
+| :--- | :--- |
+| Phiên TUI đang mở | hiện, cập nhật liên tục |
+| Vừa đóng terminal, chưa hết cửa sổ | vẫn hiện, nhưng đã cũ |
+| `resets_at` đã qua | tự ẩn |
+| Sau khi restart service / reboot | mất, tới khi có phiên TUI mới |
+
+Hai hành vi cuối là cố ý. Khi `resets_at` đã qua, con số bị bỏ khỏi bar thay vì hiện một tỉ lệ
+đã cũ — hiện sai còn tệ hơn không hiện. Và giá trị chỉ nằm trong RAM (`ClaudePanel.limits`),
+không ghi xuống đĩa, nên nó không sống sót qua một lần khởi động lại.
 
 Con số này **không nằm ở đâu trên đĩa**. Nó tới dưới dạng header
 `anthropic-ratelimit-unified-*` trên mỗi response và không được lưu lại — tra bằng ba cách
